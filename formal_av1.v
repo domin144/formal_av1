@@ -326,7 +326,6 @@ Round2Signed(x,n) {
 }
 ".
 
-(* TODO: construct expressions *)
 Inductive expression : Type :=
   | expr_number : Z -> expression
   | expr_variable : string -> expression
@@ -366,6 +365,12 @@ Inductive statement : Type :=
   | stmt_for : expression -> expression -> expression -> statement -> statement
   | stmt_return : expression -> statement
   | stmt_empty : statement.
+
+Inductive declaration : Type :=
+  | decl_constant : string -> expression -> declaration
+  | decl_constant_array :
+    string -> list expression -> list expression -> declaration
+  | decl_function : string -> list string -> statement -> declaration.
 
 Module Parser.
 
@@ -614,6 +619,15 @@ Fixpoint many_helper {T} (p : parser T) acc steps xs :=
 Fixpoint many {T} (p : parser T) (steps : nat) : parser (list T) :=
   many_helper p [] steps.
 
+Definition one_or_more
+    {T}
+    (p : parser T)
+    (steps : nat)
+    (xs : list token)
+    : optionE (list T * list token) :=
+  DO(e, xs) <== p xs;
+  many_helper p [e] steps xs.
+
 Definition firstExpect {T} (t : token) (p : parser T)
                      : parser T :=
   fun xs => match xs with
@@ -636,6 +650,18 @@ Definition ignore_optional
     SomeE (tt, xs)
   OR
     SomeE (tt, xs).
+
+Fixpoint many_separated
+    {T}
+    (p : parser T)
+    (separator : token)
+    (steps : nat)
+    (xs : list token)
+    : optionE (list T * list token) :=
+  DO (e, xs) <-- p xs;
+    many_helper (firstExpect separator p) [e] steps xs
+  OR
+    SomeE ([], xs).
 
 Definition parseIdentifier (xs : list token)
                          : optionE (string * list token) :=
@@ -774,27 +800,18 @@ with parse_operator_expression
                 (Some (expr_op2 op e e_2)))
               xs
           | ano_so so_function_call =>
-            DO (first_arg, xs) <--
-              parse_operator_expression steps' opps None xs;
-              DO (more_args, xs) <==
-                many
-                  (firstExpect "," (parse_operator_expression steps' opps None))
-                  steps'
-                  xs;
-              firstExpect
+            DO (args, xs) <==
+              many_separated
+                (parse_operator_expression steps' opps None)
+                ","
+                steps'
+                xs;
+            firstExpect
                 ")"
                 (parse_operator_expression
                   steps'
                   opps_left
-                  (Some (expr_op1n op e (first_arg :: more_args))))
-                xs
-            OR
-              firstExpect
-                ")"
-                (parse_operator_expression
-                  steps'
-                  opps_left
-                  (Some (expr_op1n op e [])))
+                  (Some (expr_op1n op e args)))
                 xs
           | _ =>
             parse_operator_expression
@@ -809,12 +826,14 @@ with parse_operator_expression
     end
   end.
 
-Definition parse_expression (xs : list token)
+Definition parse_expression
+    (steps : nat)
+    (xs : list token)
     : optionE (expression * list token) :=
-  parse_operator_expression (Datatypes.length xs * 20) opps None xs.
+  parse_operator_expression steps opps None xs.
 
 Example parse_expression_ex_0 :
-  parse_expression (tokenize "eob += ( 1 << eobShift )")
+  parse_expression 100 (tokenize "eob += ( 1 << eobShift )")
   = SomeE (
     expr_op2 (ano_aso aso_addassign) (expr_variable "eob") (
       expr_op2 (ano_bo bo_lshift) (expr_number 1) (expr_variable "eobShift")),
@@ -822,7 +841,7 @@ Example parse_expression_ex_0 :
 Proof. reflexivity. Qed.
 
 Example parse_expression_ex_1 :
-  parse_expression (tokenize "a + 3 * 5")
+  parse_expression 100 (tokenize "a + 3 * 5")
   = SomeE (
     expr_op2
       (ano_ao ao_plus)
@@ -832,7 +851,7 @@ Example parse_expression_ex_1 :
 Proof. reflexivity. Qed.
 
 Example parse_expression_ex_2 :
-  parse_expression (tokenize "3 * 5 + a")
+  parse_expression 100 (tokenize "3 * 5 + a")
   = SomeE (
     expr_op2
       (ano_ao ao_plus)
@@ -842,7 +861,7 @@ Example parse_expression_ex_2 :
 Proof. reflexivity. Qed.
 
 Example parse_expression_ex_3 :
-  parse_expression (tokenize "c[5] + a")
+  parse_expression 100 (tokenize "c[5] + a")
   = SomeE (
     expr_op2
       (ano_ao ao_plus)
@@ -853,6 +872,7 @@ Proof. reflexivity. Qed.
 
 Example parse_expression_ex_4 :
   parse_expression
+    100
     (tokenize "maxLog2TileCols = tile_log2(1, Min(MaxSbCols, MAX_TILE_COLS))")
   = SomeE
     (
@@ -874,6 +894,7 @@ Proof. reflexivity. Qed.
 
 Example parse_expression_ex_5 :
   parse_expression
+    100
     (tokenize "maxLog2TileCols = tile_log2()")
   = SomeE
     (
@@ -885,13 +906,15 @@ Example parse_expression_ex_5 :
 Proof. reflexivity. Qed.
 
 Definition parse_stmt_expression
+    (steps : nat)
     (xs : list token)
     : optionE (statement * list token) :=
-  DO (e, xs) <== parse_expression xs;
+  DO (e, xs) <== parse_expression steps xs;
     DO (_, xs) <== expect endline_token xs;
       SomeE (stmt_expression e, xs).
 
 Definition parse_pd
+    (steps : nat)
     (xs : list token)
     : optionE (parsing_descriptor * list token) :=
   match xs with
@@ -899,28 +922,28 @@ Definition parse_pd
     match x with
     | "f" =>
       DO (_, rest) <== expect "(" rest;
-        DO (e, rest) <== parse_expression rest;
+        DO (e, rest) <== parse_expression steps rest;
           DO (_, rest) <== expect ")" rest;
             SomeE (pd_fixed e, rest)
     | "le" =>
       DO (_, rest) <== expect "(" rest;
-        DO (e, rest) <== parse_expression rest;
+        DO (e, rest) <== parse_expression steps rest;
           DO (_, rest) <== expect ")" rest;
             SomeE (pd_little_endian e, rest)
     | "su" =>
       DO (_, rest) <== expect "(" rest;
-        DO (e, rest) <== parse_expression rest;
+        DO (e, rest) <== parse_expression steps rest;
           DO (_, rest) <== expect ")" rest;
             SomeE (pd_signed e, rest)
     | "L"  =>
       DO (_, rest) <== expect "(" rest;
-        DO (e, rest) <== parse_expression rest;
+        DO (e, rest) <== parse_expression steps rest;
           DO (_, rest) <== expect ")" rest;
             SomeE (pd_ae_literal e, rest)
     | "S" => SomeE (pd_ae_alphabet, rest)
     | "U" =>
       DO (_, rest) <== expect "(" rest;
-        DO (e, rest) <== parse_expression rest;
+        DO (e, rest) <== parse_expression steps rest;
           DO (_, rest) <== expect ")" rest;
             SomeE (pd_ae_unsigned e, rest)
     | _ => NoneE "invalid parsing description"
@@ -929,11 +952,12 @@ Definition parse_pd
   end.
 
 Definition parse_stmt_syntax_element
+    (steps : nat)
     (xs : list token)
     : optionE (statement * list token) :=
   DO (_, xs) <== expect "@" xs;
-  DO (e, xs) <== parse_expression xs;
-  DO (pd, xs) <== parse_pd xs;
+  DO (e, xs) <== parse_expression steps xs;
+  DO (pd, xs) <== parse_pd steps xs;
   DO (_, xs) <== expect endline_token xs;
   SomeE (stmt_syntax_element e pd, xs).
 
@@ -945,7 +969,7 @@ Definition parse_stmt_return
   | 0 => NoneE "Too many recursive calls"
   | S steps' =>
     DO (_, xs) <== expect "return" xs;
-    DO (e, xs) <== parse_expression xs;
+    DO (e, xs) <== parse_expression steps xs;
     DO (_, xs) <== expect endline_token xs;
     SomeE (stmt_return e, xs)
   end.
@@ -957,9 +981,9 @@ Fixpoint parse_stmt
   match steps with
   | 0 => NoneE "Too many recursive calls"
   | S steps' =>
-    DO (s, xs) <-- parse_stmt_expression xs;
+    DO (s, xs) <-- parse_stmt_expression steps' xs;
       SomeE (s, xs)
-    OR DO (s, rest_0) <-- parse_stmt_syntax_element xs;
+    OR DO (s, rest_0) <-- parse_stmt_syntax_element steps' xs;
       SomeE (s, xs)
     OR DO (s, xs) <-- parse_stmt_group steps' xs;
       SomeE (s, xs)
@@ -1001,7 +1025,7 @@ with parse_stmt_while
   | S steps' =>
     DO (_, xs) <== expect "while" xs;
     DO (_, xs) <== expect "(" xs;
-    DO (e, xs) <== parse_expression xs;
+    DO (e, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ")" xs;
     DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements, xs) <== parse_stmt steps' xs;
@@ -1019,7 +1043,7 @@ with parse_stmt_do_while
     DO (statements, xs) <== parse_stmt steps' xs;
     DO (_, xs) <== expect "while" xs;
     DO (_, xs) <== expect "(" xs;
-    DO (e, xs) <== parse_expression xs;
+    DO (e, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ")" xs;
     DO (_, xs) <== expect endline_token xs;
     SomeE (stmt_do_while statements e, xs)
@@ -1033,7 +1057,7 @@ with parse_stmt_if
   | S steps' =>
     DO (_, xs) <== expect "if" xs;
     DO (_, xs) <== expect "(" xs;
-    DO (e, xs) <== parse_expression xs;
+    DO (e, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ")" xs;
     DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements_if, xs) <== parse_stmt steps' xs;
@@ -1053,11 +1077,11 @@ with parse_stmt_for
   | S steps' =>
     DO (_, xs) <== expect "for" xs;
     DO (_, xs) <== expect "(" xs;
-    DO (e_0, xs) <== parse_expression xs;
+    DO (e_0, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ";" xs;
-    DO (e_1, xs) <== parse_expression xs;
+    DO (e_1, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ";" xs;
-    DO (e_2, xs) <== parse_expression xs;
+    DO (e_2, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ")" xs;
     DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements, xs) <== parse_stmt steps' xs;
@@ -1089,34 +1113,59 @@ Example parse_stmt_ex_1 :
        []).
 Proof. reflexivity. Qed.
 
-Compute (parse_stmt 100 (tokenize " {
-    obu_header()
-    sz -= 1 + obu_extension_flag
-    if ( obu_type == OBU_SEQUENCE_HEADER )
-        sequence_header_obu()
-}
-")).
+Fixpoint parse_array_dimension
+    (steps : nat)
+    (xs : list token)
+    : optionE (expression * list token) :=
+  DO(_, xs) <== expect "[" xs;
+  DO(e, xs) <== parse_expression steps xs;
+  DO(_, xs) <== expect "]" xs;
+  SomeE (e, xs).
 
-Compute (parse_stmt 100 (tokenize " {
-    obu_header()
-    sz -= 1 + obu_extension_flag
-    if ( obu_type == OBU_SEQUENCE_HEADER )
-        sequence_header_obu()
-    else if ( obu_type == OBU_TD )
-        temporal_delimiter_obu()
-    else if ( obu_type == OBU_FRAME_HEADER )
-        frame_header_obu( )
-    else if ( obu_type == OBU_TILE_GROUP )
-        tile_group_obu( sz )
-    else if ( obu_type == OBU_METADATA )
-        metadata_obu( sz )
-    else if ( obu_type == OBU_PADDING )
-        padding_obu()
-    else
-        reserved_obu( sz )
-    trailing_bits()
-}
-")).
+Fixpoint parse_array_contents
+    (depth : nat)
+    (steps : nat)
+    (xs : list token)
+    : optionE (list expression * list token) :=
+  match steps with
+  | 0 => NoneE "Too many recursive calls"
+  | S steps' =>
+    DO (_, xs) <== expect "{" xs;
+    match depth with
+    | 0 =>
+      DO (es, xs) <== many_separated (parse_expression steps') "," steps' xs;
+      DO (_, xs) <== expect "}" xs;
+      SomeE (es, xs)
+    | S depth' =>
+      DO (ll, xs) <==
+        many_separated (parse_array_contents depth' steps') "," steps' xs;
+      DO (_, xs) <== expect "}" xs;
+      SomeE (concat ll, xs)
+    end
+  end.
+
+Fixpoint parse_declaration
+    (steps : nat)
+    (xs : list token)
+    : optionE (declaration * list token) :=
+  match steps with
+  | 0 => NoneE "Too many recursive calls"
+  | S steps' =>
+    DO (identifier, xs) <== parseIdentifier xs;
+    DO (_, xs) <-- expect "=" xs;
+      DO (e, xs) <== parse_expression steps' xs;
+      SomeE (decl_constant identifier e, xs)
+    OR DO (dims, xs) <-- one_or_more (parse_array_dimension steps') steps' xs;
+      DO (_, xs) <== expect "=" xs;
+      DO (contents, xs) <== parse_array_contents (List.length dims) steps' xs;
+      SomeE (decl_constant_array identifier dims contents, xs)
+    OR DO (_, xs) <-- expect "(" xs;
+      DO (params, xs) <== many_separated parseIdentifier "," steps' xs;
+      DO (stmts, xs) <== parse_stmt steps' xs;
+      SomeE (decl_function identifier params stmts, xs)
+    OR
+      NoneE "invalid declaration"
+  end.
 
 End Parser.
 
@@ -1192,10 +1241,10 @@ sequence_header_obu( ) {
     n = frame_height_bits_minus_1 + 1
     @@max_frame_height_minus_1                                                 f(n)
     @@frame_id_numbers_present_flag                                            f(1)
-    if ( frame_id_numbers_present_flag ) {    
+    if ( frame_id_numbers_present_flag ) {
         @@frame_id_length_minus7                                               f(4)
         @@delta_frame_id_length_minus2                                         f(4)
-    }    
+    }
     color_config( )
 }".
 
@@ -1628,7 +1677,7 @@ tile_info ( ) {
     maxLog2TileRows = tile_log2(1, Min(MaxSbRows, MAX_TILE_ROWS))
     minLog2Tiles = Max(minLog2TileCols, 
                        tile_log2(MAX_TILE_AREA_SB, MaxSbRows * MaxSbCols))
-                       
+
     @@uniform_tile_spacing_flag                                                f(1)
     if ( uniform_tile_spacing_flag ) {
         TileColsLog2 = minLog2TileCols
