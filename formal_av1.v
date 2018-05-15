@@ -628,6 +628,15 @@ Definition firstExpect {T} (t : token) (p : parser T)
 Definition expect (t : token) : parser unit :=
   firstExpect t (fun xs => SomeE(tt, xs)).
 
+Definition ignore_optional
+    (t : token)
+    (xs : list token)
+    : optionE (unit * list token) :=
+  DO (_, xs) <-- expect t xs;
+    SomeE (tt, xs)
+  OR
+    SomeE (tt, xs).
+
 Definition parseIdentifier (xs : list token)
                          : optionE (string * list token) :=
 match xs with
@@ -994,7 +1003,8 @@ with parse_stmt_while
     DO (_, xs) <== expect "(" xs;
     DO (e, xs) <== parse_expression xs;
     DO (_, xs) <== expect ")" xs;
-    DO (statements, xs) <== parse_stmt_group steps' xs;
+    DO (_, xs) <== ignore_optional endline_token xs;
+    DO (statements, xs) <== parse_stmt steps' xs;
     SomeE (stmt_while e statements, xs)
   end
 with parse_stmt_do_while
@@ -1005,6 +1015,7 @@ with parse_stmt_do_while
   | 0 => NoneE "Too many recursive calls"
   | S steps' =>
     DO (_, xs) <== expect "do" xs;
+    DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements, xs) <== parse_stmt steps' xs;
     DO (_, xs) <== expect "while" xs;
     DO (_, xs) <== expect "(" xs;
@@ -1024,9 +1035,11 @@ with parse_stmt_if
     DO (_, xs) <== expect "(" xs;
     DO (e, xs) <== parse_expression xs;
     DO (_, xs) <== expect ")" xs;
-    DO (statements_if, xs) <== parse_stmt_group steps' xs;
+    DO (_, xs) <== ignore_optional endline_token xs;
+    DO (statements_if, xs) <== parse_stmt steps' xs;
     DO (_, xs) <-- expect "else" xs;
-      DO (statements_else, xs) <== parse_stmt_group steps' xs;
+      DO (_, xs) <== ignore_optional endline_token xs;
+      DO (statements_else, xs) <== parse_stmt steps' xs;
       SomeE (stmt_if_else e statements_if statements_else, xs)
     OR
       SomeE (stmt_if e statements_if, xs)
@@ -1046,7 +1059,8 @@ with parse_stmt_for
     DO (_, xs) <== expect ";" xs;
     DO (e_2, xs) <== parse_expression xs;
     DO (_, xs) <== expect ")" xs;
-    DO (statements, xs) <== parse_stmt_group steps' xs;
+    DO (_, xs) <== ignore_optional endline_token xs;
+    DO (statements, xs) <== parse_stmt steps' xs;
     SomeE (stmt_for e_0 e_1 e_2 statements, xs)
   end.
 
@@ -1064,16 +1078,45 @@ Example parse_stmt_ex_1 :
       (
         stmt_expression
           (
-            expr_op
+            expr_op2
               (ano_aso aso_subassign)
               (expr_variable "sz")
               (
-                expr_op
+                expr_op2
                   (ano_ao ao_plus)
                   (expr_number 1)
                   (expr_variable "obu_extension_flag"))),
        []).
 Proof. reflexivity. Qed.
+
+Compute (parse_stmt 100 (tokenize " {
+    obu_header()
+    sz -= 1 + obu_extension_flag
+    if ( obu_type == OBU_SEQUENCE_HEADER )
+        sequence_header_obu()
+}
+")).
+
+Compute (parse_stmt 100 (tokenize " {
+    obu_header()
+    sz -= 1 + obu_extension_flag
+    if ( obu_type == OBU_SEQUENCE_HEADER )
+        sequence_header_obu()
+    else if ( obu_type == OBU_TD )
+        temporal_delimiter_obu()
+    else if ( obu_type == OBU_FRAME_HEADER )
+        frame_header_obu( )
+    else if ( obu_type == OBU_TILE_GROUP )
+        tile_group_obu( sz )
+    else if ( obu_type == OBU_METADATA )
+        metadata_obu( sz )
+    else if ( obu_type == OBU_PADDING )
+        padding_obu()
+    else
+        reserved_obu( sz )
+    trailing_bits()
+}
+")).
 
 End Parser.
 
