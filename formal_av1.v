@@ -1122,6 +1122,8 @@ Fixpoint parse_array_dimension
   DO(_, xs) <== expect "]" xs;
   SomeE (e, xs).
 
+(* TODO: skip endlines in separated lists *)
+
 Fixpoint parse_array_contents
     (depth : nat)
     (steps : nat)
@@ -1131,14 +1133,18 @@ Fixpoint parse_array_contents
   | 0 => NoneE "Too many recursive calls"
   | S steps' =>
     DO (_, xs) <== expect "{" xs;
+    DO (_, xs) <== ignore_optional endline_token xs;
     match depth with
-    | 0 =>
+    | 0 => NoneE "invalid depth"
+    | 1 =>
       DO (es, xs) <== many_separated (parse_expression steps') "," steps' xs;
+      DO (_, xs) <== ignore_optional endline_token xs;
       DO (_, xs) <== expect "}" xs;
       SomeE (es, xs)
     | S depth' =>
       DO (ll, xs) <==
         many_separated (parse_array_contents depth' steps') "," steps' xs;
+      DO (_, xs) <== ignore_optional endline_token xs;
       DO (_, xs) <== expect "}" xs;
       SomeE (concat ll, xs)
     end
@@ -1161,11 +1167,39 @@ Fixpoint parse_declaration
       SomeE (decl_constant_array identifier dims contents, xs)
     OR DO (_, xs) <-- expect "(" xs;
       DO (params, xs) <== many_separated parseIdentifier "," steps' xs;
+      DO (_, xs) <== expect ")" xs;
       DO (stmts, xs) <== parse_stmt steps' xs;
       SomeE (decl_function identifier params stmts, xs)
     OR
       NoneE "invalid declaration"
   end.
+
+Example parse_declaration_ex0 :
+  parse_declaration 100 (tokenize "f_1(a, b, c, d) {
+}")
+  = SomeE (decl_function "f_1" ["a"; "b"; "c"; "d"] (stmt_group []), []).
+Proof. reflexivity. Qed.
+
+Example parse_declaration_ex1 :
+  parse_declaration 100 (tokenize "x[1][2][3] = {{{0, 1, 2},{3, 4, 5}}}")
+  = SomeE (
+    decl_constant_array
+      "x"
+      [expr_number 1; expr_number 2; expr_number 3]
+      [
+        expr_number 0; expr_number 1; expr_number 2; expr_number 3;
+        expr_number 4; expr_number 5],
+    []).
+Proof. reflexivity. Qed.
+
+Example parse_declaration_ex2 :
+  parse_declaration 100 (tokenize "x = 2 + y")
+  = SomeE (
+    decl_constant
+      "x"
+      (expr_op2 (ano_ao ao_plus) (expr_number 2) (expr_variable "y")),
+    []).
+Proof. reflexivity. Qed.
 
 End Parser.
 
