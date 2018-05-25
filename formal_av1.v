@@ -288,7 +288,8 @@ Inductive assignment_operator : Type :=
 
 Inductive special_operator : Type :=
   | so_function_call
-  | so_subscript.
+  | so_subscript
+  | so_tunrary.
 
 Inductive any_operator :=
   | ano_ao : arithmetic_operator -> any_operator
@@ -413,7 +414,8 @@ Definition opps :
       [
         opp (ano_aso aso_assign) "=";
         opp (ano_aso aso_addassign) "+=";
-        opp (ano_aso aso_subassign) "-="
+        opp (ano_aso aso_subassign) "-=";
+        opp (ano_so so_tunrary) "?";
       ]);
     ( bd_left_to_right,
       [
@@ -743,6 +745,8 @@ Proof. reflexivity. Qed.
 
 Definition dummy_expr : expression := expr_number 0.
 
+(* TODO: parse turnary operator *)
+
 Fixpoint parse_primary_expression
     (steps : nat)
     (xs : list token)
@@ -975,7 +979,7 @@ Definition parse_stmt_syntax_element
     (steps : nat)
     (xs : list token)
     : optionE (statement * list token) :=
-  DO (_, xs) <== expect "@" xs;
+  DO (_, xs) <== expect "@@" xs;
   DO (e, xs) <== parse_expression steps xs;
   DO (pd, xs) <== parse_pd steps xs;
   DO (_, xs) <== expect endline_token xs;
@@ -1003,7 +1007,7 @@ Fixpoint parse_stmt
   | S steps' =>
     DO (s, xs) <-- parse_stmt_expression steps' xs;
       SomeE (s, xs)
-    OR DO (s, rest_0) <-- parse_stmt_syntax_element steps' xs;
+    OR DO (s, xs) <-- parse_stmt_syntax_element steps' xs;
       SomeE (s, xs)
     OR DO (s, xs) <-- parse_stmt_group steps' xs;
       SomeE (s, xs)
@@ -1133,6 +1137,16 @@ Example parse_stmt_ex_1 :
        []).
 Proof. reflexivity. Qed.
 
+Example parse_stmt_ex_2 :
+  parse_stmt 100 ((tokenize "@@obu_forbidden_bit f(1)") ++ [endline_token])
+  = SomeE
+      (
+        stmt_syntax_element
+          (expr_variable "obu_forbidden_bit")
+          (pd_fixed (expr_number 1)),
+        []).
+Proof. reflexivity. Qed.
+
 Fixpoint parse_array_dimension
     (steps : nat)
     (xs : list token)
@@ -1177,18 +1191,22 @@ Fixpoint parse_declaration
   match steps with
   | 0 => NoneE "Too many recursive calls"
   | S steps' =>
+    DO (_, xs) <== ignore_optional endline_token xs;
     DO (identifier, xs) <== parseIdentifier xs;
     DO (_, xs) <-- expect "=" xs;
       DO (e, xs) <== parse_expression steps' xs;
+      DO (_, xs) <== ignore_optional endline_token xs;
       SomeE (decl_constant identifier e, xs)
     OR DO (dims, xs) <-- one_or_more (parse_array_dimension steps') steps' xs;
       DO (_, xs) <== expect "=" xs;
       DO (contents, xs) <== parse_array_contents (List.length dims) steps' xs;
+      DO (_, xs) <== ignore_optional endline_token xs;
       SomeE (decl_constant_array identifier dims contents, xs)
     OR DO (_, xs) <-- expect "(" xs;
       DO (params, xs) <== many_separated parseIdentifier "," steps' xs;
       DO (_, xs) <== expect ")" xs;
       DO (stmts, xs) <== parse_stmt steps' xs;
+      DO (_, xs) <== ignore_optional endline_token xs;
       SomeE (decl_function identifier params stmts, xs)
     OR
       NoneE "invalid declaration"
@@ -1220,6 +1238,72 @@ Example parse_declaration_ex2 :
       (expr_op2 (ano_ao ao_plus) (expr_number 2) (expr_variable "y")),
     []).
 Proof. reflexivity. Qed.
+
+Example parse_declaration_ex3 :
+  parse_declaration 100 (tokenize "
+obu_header() {
+    @@obu_forbidden_bit f(1)
+}")
+  = SomeE
+    (
+      decl_function "obu_header" []
+        (
+          stmt_group
+          [
+            stmt_syntax_element
+              (expr_variable "obu_forbidden_bit")
+              (pd_fixed (expr_number 1))]),
+      []).
+Proof. reflexivity. Qed.
+
+
+Compute parse_declaration 1000 (tokenize "
+color_config( ) {
+        BitDepth = ten_or_twelve_bit ? 12 : 10
+}").
+
+Compute parse_declaration 1000 (tokenize "
+color_config( ) {
+    if ( Profile >= 2 ) {
+        @@ten_or_twelve_bit                                                    f(1)
+        BitDepth = ten_or_twelve_bit ? 12 : 10
+    } else {
+        BitDepth = 8
+    }
+    @@color_space                                                              f(5)
+    @@transfer_function                                                        f(5)
+    if ( color_space != CS_SRGB ) {
+        @@color_range                                                          f(1)
+        if ( Profile == 1 || Profile == 3 ) {
+            @@subsampling_x                                                    f(1)
+            @@subsampling_y                                                    f(1)
+            @@reserved_zero                                                    f(1)
+        } else {
+            subsampling_x = 1
+            subsampling_y = 1
+        }
+        if (subsampling_x && subsampling_y) {
+            @@chroma_sample_position                                           f(2)
+        }
+    } else {
+        color_range = 1
+        if ( Profile == 1 || Profile == 3 ) {
+            subsampling_x = 0
+            subsampling_y = 0
+            @@reserved_zero                                                    f(1)
+        }
+    }
+}").
+
+Definition tokenize_pseudocode (pc : pseudocode) : list token :=
+  match pc with
+  | pseudocode_intro s => tokenize s
+  end.
+
+Fixpoint parse_pseudocode (pc : pseudocode) : optionE (list declaration * list token) :=
+  let ts := tokenize_pseudocode pc in
+  let l := List.length ts in
+    many (parse_declaration l) l ts.
 
 End Parser.
 
@@ -4236,6 +4320,150 @@ decode_subexp_bool( numSyms, k ) {
     }
 }
 ".
+
+Definition syntax_pseudocodes :=
+  [
+    syntax_pseudocode_open_bitstream_unit;
+    syntax_pseudocode_obu_header;
+    syntax_pseudocode_obu_extension_header;
+    syntax_pseudocode_trailing_bits;
+    syntax_pseudocode_reserved_obu;
+    syntax_pseudocode_sequence_header_obu;
+    syntax_pseudocode_color_config;
+    syntax_pseudocode_temporal_delimiter_obu;
+    syntax_pseudocode_padding_obu;
+    syntax_pseudocode_metadata_obu;
+    syntax_pseudocode_metadata_private_data;
+    syntax_pseudocode_metadata_hdr_cll;
+    syntax_pseudocode_metadata_hdr_mdcv;
+    syntax_pseudocode_frame_header_obu;
+    syntax_pseudocode_uncompressed_header;
+    syntax_pseudocode_frame_size;
+    syntax_pseudocode_render_size;
+    syntax_pseudocode_frame_size_with_refs;
+    syntax_pseudocode_compute_image_size;
+    syntax_pseudocode_read_interpolation_filter;
+    syntax_pseudocode_loop_filter_params;
+    syntax_pseudocode_quantization_params;
+    syntax_pseudocode_read_delta_q;
+    syntax_pseudocode_segmentation_params;
+    syntax_pseudocode_tile_info;
+    syntax_pseudocode_tile_log2;
+    syntax_pseudocode_delta_q_params;
+    syntax_pseudocode_delta_lf_params;
+    syntax_pseudocode_cdef_params;
+    syntax_pseudocode_lr_params;
+    syntax_pseudocode_read_tx_mode;
+    syntax_pseudocode_frame_reference_mode;
+    syntax_pseudocode_global_motion_params;
+    syntax_pseudocode_read_global_param;
+    syntax_pseudocode_decode_signed_subexp_with_ref;
+    syntax_pseudocode_decode_unsigned_subexp_with_ref;
+    syntax_pseudocode_decode_subexp;
+    syntax_pseudocode_decode_uniform;
+    syntax_pseudocode_inverse_recenter;
+    syntax_pseudocode_inv_recenter_nonneg;
+    syntax_pseudocode_tile_group_obu;
+    syntax_pseudocode_decode_tile;
+    syntax_pseudocode_clear_block_decoded_flags;
+    syntax_pseudocode_decode_partition;
+    syntax_pseudocode_decode_block;
+    syntax_pseudocode_mode_info;
+    syntax_pseudocode_intra_frame_mode_info;
+    syntax_pseudocode_intra_segment_id;
+    syntax_pseudocode_read_skip;
+    syntax_pseudocode_read_delta_qindex;
+    syntax_pseudocode_read_delta_lf;
+    syntax_pseudocode_seg_feature_active_idx;
+    syntax_pseudocode_seg_feature_active;
+    syntax_pseudocode_read_tx_size;
+    syntax_pseudocode_read_inter_tx_size;
+    syntax_pseudocode_read_var_tx_size;
+    syntax_pseudocode_inter_frame_mode_info;
+    syntax_pseudocode_inter_segment_id;
+    syntax_pseudocode_read_is_inter;
+    syntax_pseudocode_get_segment_id;
+    syntax_pseudocode_intra_block_mode_info;
+    syntax_pseudocode_inter_block_mode_info;
+    syntax_pseudocode_has_nearmv;
+    syntax_pseudocode_needs_interp_filter;
+    syntax_pseudocode_read_ref_frames;
+    syntax_pseudocode_assign_mv;
+    syntax_pseudocode_read_motion_mode;
+    syntax_pseudocode_read_interintra_mode;
+    syntax_pseudocode_read_compound_type;
+    syntax_pseudocode_get_mode;
+    syntax_pseudocode_read_mv;
+    syntax_pseudocode_read_mv_component;
+    syntax_pseudocode_residual;
+    syntax_pseudocode_transform_block;
+    syntax_pseudocode_transform_tree;
+    syntax_pseudocode_find_tx_size;
+    syntax_pseudocode_get_tx_size;
+    syntax_pseudocode_get_plane_residual_size;
+    syntax_pseudocode_Subsampled_Size;
+    syntax_pseudocode_coeffs;
+    syntax_pseudocode_compute_tx_type;
+    syntax_pseudocode_get_mrow_scan;
+    syntax_pseudocode_get_row_scan;
+    syntax_pseudocode_get_mcol_scan;
+    syntax_pseudocode_get_col_scan;
+    syntax_pseudocode_get_default_scan;
+    syntax_pseudocode_get_scan;
+    syntax_pseudocode_read_coef;
+    syntax_pseudocode_intra_angle_info;
+    syntax_pseudocode_is_directional_mode;
+    syntax_pseudocode_read_cfl_alphas;
+    syntax_pseudocode_palette_mode_info;
+    syntax_pseudocode_get_palette_cache;
+    syntax_pseudocode_transform_type;
+    syntax_pseudocode_get_tx_set;
+    syntax_pseudocode_palette_tokens;
+    syntax_pseudocode_get_palette_color_context;
+    syntax_pseudocode_ref_checks;
+    syntax_pseudocode_clamp_mv_row;
+    syntax_pseudocode_clamp_mv_col;
+    syntax_pseudocode_clear_cdef;
+    syntax_pseudocode_read_cdef;
+    syntax_pseudocode_decode_lr;
+    syntax_pseudocode_count_units_in_tile;
+    syntax_pseudocode_decode_lr_unit;
+    syntax_pseudocode_decode_signed_subexp_with_ref_bool;
+    syntax_pseudocode_decode_unsigned_subexp_with_ref_bool;
+    syntax_pseudocode_decode_subexp_bool
+  ].
+
+Module Syntax_processor.
+
+Definition definitionsE :=
+  (map Parser.parse_pseudocode syntax_pseudocodes).
+
+Compute definitionsE.
+
+Theorem all_definitions_parsed :
+  forallb
+    (
+      fun x => match x with
+      | Parser.SomeE (_, []) => true
+      | _ => false
+      end)
+    definitionsE = true.
+Proof.
+(* TODO *)
+
+
+Definition state := Parser.token -> Z.
+
+Reserved Notation "e '\\' n" (at level 50, left associativity).
+
+Inductive 
+
+End Syntax_processor.
+
+Inductive bit := bit_0 | bit_1.
+Inductive byte :=
+  byte_intro : forall (_ _ _ _ _ _ _ _ : bit), byte.
+Definition bytestream := list byte.
 
 End av1.
 
