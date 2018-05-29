@@ -696,21 +696,70 @@ match xs with
       NoneE ("Illegal identifier:'" ++ x ++ "'")
 end.
 
+Definition hex_to_number (c : ascii) : optionE nat :=
+  match c with
+  | "0"%char => SomeE 0
+  | "1"%char => SomeE 1
+  | "2"%char => SomeE 2
+  | "3"%char => SomeE 3
+  | "4"%char => SomeE 4
+  | "5"%char => SomeE 5
+  | "6"%char => SomeE 6
+  | "7"%char => SomeE 7
+  | "8"%char => SomeE 8
+  | "9"%char => SomeE 9
+  | "a"%char => SomeE 10
+  | "b"%char => SomeE 11
+  | "c"%char => SomeE 12
+  | "d"%char => SomeE 13
+  | "e"%char => SomeE 14
+  | "f"%char => SomeE 15
+  | "A"%char => SomeE 10
+  | "B"%char => SomeE 11
+  | "C"%char => SomeE 12
+  | "D"%char => SomeE 13
+  | "E"%char => SomeE 14
+  | "F"%char => SomeE 15
+  | _ => NoneE "expected hex digit"
+  end.
+
+Definition is_hex_digit (c : ascii) : bool :=
+  match hex_to_number c with
+  | SomeE _ => true
+  | NoneE _ => false
+  end.
+
 Definition parseNumber (xs : list token)
                      : optionE (nat * list token) :=
 match xs with
 | [] => NoneE "Expected number"
 | x::xs' =>
-    if forallb isDigit (list_of_string x) then
-      SomeE (fold_left
-               (fun n d =>
-                  10 * n + (nat_of_ascii d -
-                            nat_of_ascii "0"%char))
-               (list_of_string x)
-               0,
-             xs')
-    else
-      NoneE "Expected number"
+      if forallb isDigit (list_of_string x) then
+        SomeE (fold_left
+                 (fun n d =>
+                    10 * n + (nat_of_ascii d -
+                              nat_of_ascii "0"%char))
+                 (list_of_string x)
+                 0,
+               xs')
+      else
+        match (list_of_string x) with
+        | "0"%char :: "x"%char :: tx =>
+          if forallb is_hex_digit tx then
+            SomeE (fold_left
+                     (fun n d =>
+                        match hex_to_number d with
+                        | SomeE dd => 16 * n + dd
+                        | _ => 0
+                        end)
+                     tx
+                     0,
+                   xs')
+          else
+            NoneE "Expected number"
+        | _ =>
+          NoneE "Expected number"
+        end
 end.
 
 Fixpoint parse_operator
@@ -761,7 +810,7 @@ Fixpoint parse_primary_expression
     OR (
       DO (e, xs) <==
         firstExpect "(" (parse_operator_expression steps' opps None) xs ;
-      DO (u, xs) <== expect ")" xs ;
+      DO (_, xs) <== expect ")" xs ;
       SomeE(e, xs))
   end
 with parse_operator_expression
@@ -784,6 +833,7 @@ with parse_operator_expression
           | Some e => SomeE (e, xs)
           end ;
         DO (op, xs) <-- parse_operator opps_at_level xs ;
+          DO (_, xs) <== ignore_optional endline_token xs;
           DO (e2, xs) <== parse_operator_expression steps' other_opps None xs ;
           parse_operator_expression
             steps'
@@ -796,10 +846,11 @@ with parse_operator_expression
         DO (e1, xs) <== parse_operator_expression steps' other_opps None xs ;
         DO (op, xs) <--
           parse_operator opps_at_level xs ;
+          DO (_, xs) <== ignore_optional endline_token xs;
           DO (e2, xs) <== parse_operator_expression steps' opps_left None xs ;
           match op with
           | (ano_so so_tunrary) =>
-            DO (u, xs) <== expect ":" xs ;
+            DO (_, xs) <== expect ":" xs ;
             DO (e3, xs) <== parse_operator_expression steps' opps_left None xs ;
             SomeE (expr_op1n op e1 [e2; e3], xs)
           | _ =>
@@ -967,6 +1018,16 @@ Example parse_expression_ex_7 :
     []).
 Proof. reflexivity. Qed.
 
+Example parse_expression_ex_8 :
+  parse_expression 100 (tokenize "refresh_frame_flags = 0xFF")
+  = SomeE (
+    expr_op2
+      (ano_aso aso_assign)
+      (expr_variable "refresh_frame_flags")
+      (expr_number 255),
+    []).
+Proof. reflexivity. Qed.
+
 Definition parse_stmt_expression
     (steps : nat)
     (xs : list token)
@@ -1031,9 +1092,12 @@ Definition parse_stmt_return
   | 0 => NoneE "Too many recursive calls"
   | S steps' =>
     DO (_, xs) <== expect "return" xs;
-    DO (e, xs) <== parse_expression steps xs;
-    DO (_, xs) <== expect endline_token xs;
-    SomeE (stmt_return e, xs)
+    DO (e, xs) <-- parse_expression steps xs;
+      DO (_, xs) <== expect endline_token xs;
+      SomeE (stmt_return e, xs)
+    OR
+      DO (_, xs) <== expect endline_token xs;
+      SomeE (stmt_return (expr_number 0), xs)
   end.
 
 Fixpoint parse_stmt
@@ -1294,43 +1358,150 @@ obu_header() {
       []).
 Proof. reflexivity. Qed.
 
-
 Compute parse_declaration 1000 (tokenize "
-color_config( ) {
-        BitDepth = ten_or_twelve_bit ? 12 : 10
-}").
-
-Compute parse_declaration 1000 (tokenize "
-color_config( ) {
-    if ( Profile >= 2 ) {
-        @@ten_or_twelve_bit                                                    f(1)
-        BitDepth = ten_or_twelve_bit ? 12 : 10
-    } else {
-        BitDepth = 8
+uncompressed_header( ) {
+    idLen = frame_id_length_minus7 + 7
+    @@show_existing_frame                                                      f(1)
+    if ( show_existing_frame == 1 ) {
+        @@frame_to_show_map_idx                                                f(3)
+        refresh_frame_flags = 0
+        for ( i = 0; i < FRAME_LF_COUNT; i++ )
+            loop_filter_level[ i ] = 0
+        if (frame_id_numbers_present_flag) {
+            @@display_frame_id                                                 f(idLen)
+        }
+        CurrentVideoFrame += 1
+        return
     }
-    @@color_space                                                              f(5)
-    @@transfer_function                                                        f(5)
-    if ( color_space != CS_SRGB ) {
-        @@color_range                                                          f(1)
-        if ( Profile == 1 || Profile == 3 ) {
-            @@subsampling_x                                                    f(1)
-            @@subsampling_y                                                    f(1)
-            @@reserved_zero                                                    f(1)
+    @@frame_type                                                               f(2)
+    @@show_frame                                                               f(1)
+    @@error_resilient_mode                                                     f(1)
+    if ( frame_id_numbers_present_flag ) {
+        @@current_frame_id                                                     f(idLen)
+    }
+    @@frame_size_override_flag                                                 f(1)
+    FrameIsIntra = (frame_type == INTRA_ONLY_FRAME || 
+                    frame_type == KEY_FRAME)
+    if ( frame_type == KEY_FRAME ) {
+        frame_size( )
+        render_size( )
+        @@use_128x128_superblock                                               f(1)
+        @@allow_screen_content_tools                                           f(1)
+        refresh_frame_flags = 0xFF
+        CurrentVideoFrame = 0
+        if (allow_screen_content_tools) {
+            @@seq_choose_integer_mv                                            f(1)
+            if ( seq_choose_integer_mv ) {
+                seq_force_integer_mv = SELECT_INTEGER_MV
+            } else {
+                @@seq_force_integer_mv                                         f(1)
+            }
         } else {
-            subsampling_x = 1
-            subsampling_y = 1
-        }
-        if (subsampling_x && subsampling_y) {
-            @@chroma_sample_position                                           f(2)
+            seq_force_integer_mv = 0
         }
     } else {
-        color_range = 1
-        if ( Profile == 1 || Profile == 3 ) {
-            subsampling_x = 0
-            subsampling_y = 0
-            @@reserved_zero                                                    f(1)
+        if ( frame_type == INTRA_ONLY_FRAME ) {
+            @@allow_screen_content_tools                                       f(1)
+        }
+        if ( frame_type == INTRA_ONLY_FRAME ) {
+            @@refresh_frame_flags                                              f(8)
+            frame_size( )
+            render_size( )
+            @@use_128x128_superblock                                           f(1)
+        } else {
+            if (frame_type == SWITCH_FRAME ) {
+                refresh_frame_flags = 0xFF
+            } else {
+                @@refresh_frame_flags                                          f(8)
+            }
+            for( i = 0; i < REFS_PER_FRAME; i++ ) {
+                @@ref_frame_idx[ i ]                                           f(3)
+                if (frame_type == SWITCH_FRAME ) {
+                    ref_frame_sign_bias[ LAST_FRAME + i ] = 0
+                } else {
+                    @@ref_frame_sign_bias[ LAST_FRAME + i ]                    f(1)
+                }
+                if (frame_id_numbers_present_flag) {
+                    n = delta_frame_id_length_minus2 + 2
+                    @@delta_frame_id_minus1                                    f(n)
+                    DeltaFrameId = delta_frame_id_minus1 + 1
+                    RefFrameId = ((current_frame_id -
+                                  DeltaFrameId ) % (1 << idLen))
+                }
+            }
+            if ( frame_size_override_flag && !error_resilient_mode ) {
+                frame_size_with_refs( )
+            } else {
+                frame_size( )
+                render_size( )
+            }
+            if ( seq_force_integer_mv == SELECT_INTEGER_MV )
+                @@force_integer_mv                                             f(1)
+            else
+                force_integer_mv = seq_force_integer_mv
+            if ( force_integer_mv ) {
+                allow_high_precision_mv = 0
+            } else {
+                @@allow_high_precision_mv                                      f(1)
+            }
+            read_interpolation_filter( )
+            if ( error_resilient_mode ) {
+                can_use_previous = 0
+            } else {
+                @@can_use_previous                                             f(1)
+            }
         }
     }
+    if (show_frame == 0) {
+        @@frame_offset_update                                                  f(4)
+        DecodeOrder = CurrentVideoFrame + frame_offset_update
+    } else {
+        DecodeOrder = CurrentVideoFrame
+        CurrentVideoFrame += 1
+    }
+    if ( !FrameIsIntra ) {
+        for( i = 0; i < REFS_PER_FRAME; i++ ) {
+            DecodeOrders[ LAST_FRAME + i ] = RefDecodeOrder[ ref_frame_idx[ i ] ]
+        }
+    }
+    if ( error_resilient_mode ) {
+        frame_parallel_decoding_mode = 1
+    } else {
+        @@frame_parallel_decoding_mode                                         f(1)
+    }
+    if ( FrameIsIntra || error_resilient_mode ) {
+        setup_past_independence ( )
+    } else {
+        load_cdfs( ref_frame_idx[ 0 ] )
+        load_previous( )
+    }
+    loop_filter_params( )
+    quantization_params( )
+    segmentation_params( )
+    delta_q_params( )
+    AllLossless = 1
+    for ( segmentId = 0; segmentId < MAX_SEGMENTS; segmentId++ ) {
+        qindex = get_qindex( 1, segmentId )
+        LosslessArray[ segmentId ] = qindex == 0 && deltaQYDc == 0 && deltaQUVAc == 0 && deltaQUVDc == 0
+        if ( !LosslessArray[ segmentId ] )
+            AllLossless = 0
+        if ( using_qmatrix ) {
+            if ( LosslessArray[ segmentId ] ) {
+                qmLevel = 15
+            } else {
+                qmLevel = min_qmlevel + ( base_q_idx * ( max_qmlevel - min_qmlevel + 1 ) ) / 256
+            }
+            SegQMLevel[ segmentId ] = qmLevel
+        }
+    }
+    delta_lf_params( )
+    cdef_params( )
+    lr_params( )
+    read_tx_mode( )
+    global_motion_params( )
+    frame_reference_mode( )
+    @@reduced_tx_set                                                           f(1)
+    tile_info( )
 }").
 
 Definition tokenize_pseudocode (pc : pseudocode) : list token :=
@@ -1340,7 +1511,7 @@ Definition tokenize_pseudocode (pc : pseudocode) : list token :=
 
 Fixpoint parse_pseudocode (pc : pseudocode) : optionE (list declaration * list token) :=
   let ts := tokenize_pseudocode pc in
-  let l := List.length ts in
+  let l := (List.length ts) * 20 in
     many (parse_declaration l) l ts.
 
 End Parser.
@@ -1477,11 +1648,11 @@ Definition syntax_pseudocode_metadata_obu :=
 metadata_obu( sz ) {
     @@metadata_type                                                            f(16)
     if ( metadata_type == METADATA_TYPE_PRIVATE_DATA )
-        metadata_private_data( sz − 2 )
+        metadata_private_data( sz - 2 )
     else if ( metadata_type == METADATA_TYPE_HDR_CLL ) 
-        metadata_hdr_cll( sz − 2 )
+        metadata_hdr_cll( sz - 2 )
     else if ( metadata_type == METADATA_TYPE_HDR_MDCV )
-        metadata_hdr_mdcv( sz − 2 )
+        metadata_hdr_mdcv( sz - 2 )
 }".
 
 Definition syntax_pseudocode_metadata_private_data :=
