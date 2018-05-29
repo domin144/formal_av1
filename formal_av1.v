@@ -415,7 +415,7 @@ Definition opps :
         opp (ano_aso aso_assign) "=";
         opp (ano_aso aso_addassign) "+=";
         opp (ano_aso aso_subassign) "-=";
-        opp (ano_so so_tunrary) "?";
+        opp (ano_so so_tunrary) "?"
       ]);
     ( bd_left_to_right,
       [
@@ -778,14 +778,6 @@ with parse_operator_expression
     | (bd, opps_at_level) :: other_opps =>
       match bd with
       | bd_left_to_right =>
-        DO (e1, xs) <== parse_operator_expression steps' other_opps None xs ;
-        DO (op, xs) <--
-          parse_operator opps_at_level xs ;
-          DO (e2, xs) <== parse_operator_expression steps' opps_left None xs ;
-          SomeE (expr_op2 op e1 e2, xs)
-        OR
-          SomeE (e1, xs)
-      | bd_right_to_left =>
         DO (e1, xs) <==
           match accum_expr with
           | None => parse_operator_expression steps' other_opps None xs
@@ -798,6 +790,21 @@ with parse_operator_expression
             opps_left
             (Some (expr_op2 op e1 e2))
             xs
+        OR
+          SomeE (e1, xs)
+      | bd_right_to_left =>
+        DO (e1, xs) <== parse_operator_expression steps' other_opps None xs ;
+        DO (op, xs) <--
+          parse_operator opps_at_level xs ;
+          DO (e2, xs) <== parse_operator_expression steps' opps_left None xs ;
+          match op with
+          | (ano_so so_tunrary) =>
+            DO (u, xs) <== expect ":" xs ;
+            DO (e3, xs) <== parse_operator_expression steps' opps_left None xs ;
+            SomeE (expr_op1n op e1 [e2; e3], xs)
+          | _ =>
+            SomeE (expr_op2 op e1 e2, xs)
+          end
         OR
           SomeE (e1, xs)
       | bd_unary_left =>
@@ -927,6 +934,37 @@ Example parse_expression_ex_5 :
         (expr_variable "maxLog2TileCols")
         (expr_op1n (ano_so so_function_call) (expr_variable "tile_log2") []),
      []).
+Proof. reflexivity. Qed.
+
+Example parse_expression_ex_6 :
+  parse_expression 100 (tokenize "a = b = 3 + 5 + a")
+  = SomeE (
+      expr_op2
+        (ano_aso aso_assign)
+        (expr_variable "a")
+        (
+          expr_op2 (ano_aso aso_assign) (expr_variable "b")
+          (
+            expr_op2
+              (ano_ao ao_plus)
+              (expr_op2 (ano_ao ao_plus) (expr_number 3) (expr_number 5))
+              (expr_variable "a"))),
+      []).
+Proof. reflexivity. Qed.
+
+Example parse_expression_ex_7 :
+  parse_expression 100 (tokenize "1 ? 2 : 3 ? 4 : 5")
+  = SomeE (
+    expr_op1n
+      (ano_so so_tunrary)
+      (expr_number 1)
+      [
+        (expr_number 2);
+        expr_op1n
+          (ano_so so_tunrary)
+          (expr_number 3)
+          [(expr_number 4); (expr_number 5)]],
+    []).
 Proof. reflexivity. Qed.
 
 Definition parse_stmt_expression
