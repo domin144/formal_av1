@@ -284,7 +284,9 @@ Inductive assignment_operator : Type :=
   | aso_postinc
   | aso_postdec
   | aso_addassign
-  | aso_subassign.
+  | aso_subassign
+  | aso_mulassign
+  | aso_divassign.
 
 Inductive special_operator : Type :=
   | so_function_call
@@ -415,6 +417,8 @@ Definition opps :
         opp (ano_aso aso_assign) "=";
         opp (ano_aso aso_addassign) "+=";
         opp (ano_aso aso_subassign) "-=";
+        opp (ano_aso aso_mulassign) "*=";
+        opp (ano_aso aso_divassign) "/=";
         opp (ano_so so_tunrary) "?"
       ]);
     ( bd_left_to_right,
@@ -650,6 +654,16 @@ Definition one_or_more
   DO(e, xs) <== p xs;
   many_helper p [e] steps xs.
 
+Definition first_expect_custom_parser
+    {T}
+    (first_p : parser unit)
+    (p : parser T)
+    (xs : list token)
+    : optionE (T * list token) :=
+  DO (_, xs) <== first_p xs;
+  DO (e, xs) <== p xs;
+  SomeE (e, xs).
+
 Definition firstExpect {T} (t : token) (p : parser T)
                      : parser T :=
   fun xs => match xs with
@@ -672,6 +686,18 @@ Definition ignore_optional
     SomeE (tt, xs)
   OR
     SomeE (tt, xs).
+
+Fixpoint many_separated_custom_parser
+    {T}
+    (p : parser T)
+    (separator_parser : parser unit)
+    (steps : nat)
+    (xs : list token)
+    : optionE (list T * list token) :=
+  DO (e, xs) <-- p xs;
+    many_helper (first_expect_custom_parser separator_parser p) [e] steps xs
+  OR
+    SomeE ([], xs).
 
 Fixpoint many_separated
     {T}
@@ -794,7 +820,11 @@ Proof. reflexivity. Qed.
 
 Definition dummy_expr : expression := expr_number 0.
 
-(* TODO: parse turnary operator *)
+Definition parse_argument_separator
+    (xs : list token)
+    : optionE (unit * list token) :=
+  DO (_, xs) <== expect "," xs;
+  ignore_optional endline_token xs.
 
 Fixpoint parse_primary_expression
     (steps : nat)
@@ -851,6 +881,7 @@ with parse_operator_expression
           match op with
           | (ano_so so_tunrary) =>
             DO (_, xs) <== expect ":" xs ;
+            DO (_, xs) <== ignore_optional endline_token xs;
             DO (e3, xs) <== parse_operator_expression steps' opps_left None xs ;
             SomeE (expr_op1n op e1 [e2; e3], xs)
           | _ =>
@@ -883,9 +914,9 @@ with parse_operator_expression
               xs
           | ano_so so_function_call =>
             DO (args, xs) <==
-              many_separated
+              many_separated_custom_parser
                 (parse_operator_expression steps' opps None)
-                ","
+                parse_argument_separator
                 steps'
                 xs;
             firstExpect
@@ -1025,6 +1056,27 @@ Example parse_expression_ex_8 :
       (ano_aso aso_assign)
       (expr_variable "refresh_frame_flags")
       (expr_number 255),
+    []).
+Proof. reflexivity. Qed.
+
+Example parse_expression_ex_9 :
+ parse_expression 100 (tokenize "FeatureData[ i ][ j ] *= -1")
+  = SomeE (
+    expr_op2
+      (ano_aso aso_mulassign)
+      (
+        expr_op2
+          (ano_so so_subscript)
+          (
+            expr_op2
+              (ano_so so_subscript)
+              (expr_variable "FeatureData")
+              (expr_variable "i"))
+          (expr_variable "j"))
+      (
+        expr_op1
+          (ano_ao ao_minus_unary)
+          (expr_number 1)),
     []).
 Proof. reflexivity. Qed.
 
@@ -1273,13 +1325,13 @@ Fixpoint parse_array_contents
     match depth with
     | 0 => NoneE "invalid depth"
     | 1 =>
-      DO (es, xs) <== many_separated (parse_expression steps') "," steps' xs;
+      DO (es, xs) <== many_separated_custom_parser (parse_expression steps') parse_argument_separator steps' xs;
       DO (_, xs) <== ignore_optional endline_token xs;
       DO (_, xs) <== expect "}" xs;
       SomeE (es, xs)
     | S depth' =>
       DO (ll, xs) <==
-        many_separated (parse_array_contents depth' steps') "," steps' xs;
+        many_separated_custom_parser (parse_array_contents depth' steps') parse_argument_separator steps' xs;
       DO (_, xs) <== ignore_optional endline_token xs;
       DO (_, xs) <== expect "}" xs;
       SomeE (concat ll, xs)
@@ -1357,152 +1409,6 @@ obu_header() {
               (pd_fixed (expr_number 1))]),
       []).
 Proof. reflexivity. Qed.
-
-Compute parse_declaration 1000 (tokenize "
-uncompressed_header( ) {
-    idLen = frame_id_length_minus7 + 7
-    @@show_existing_frame                                                      f(1)
-    if ( show_existing_frame == 1 ) {
-        @@frame_to_show_map_idx                                                f(3)
-        refresh_frame_flags = 0
-        for ( i = 0; i < FRAME_LF_COUNT; i++ )
-            loop_filter_level[ i ] = 0
-        if (frame_id_numbers_present_flag) {
-            @@display_frame_id                                                 f(idLen)
-        }
-        CurrentVideoFrame += 1
-        return
-    }
-    @@frame_type                                                               f(2)
-    @@show_frame                                                               f(1)
-    @@error_resilient_mode                                                     f(1)
-    if ( frame_id_numbers_present_flag ) {
-        @@current_frame_id                                                     f(idLen)
-    }
-    @@frame_size_override_flag                                                 f(1)
-    FrameIsIntra = (frame_type == INTRA_ONLY_FRAME || 
-                    frame_type == KEY_FRAME)
-    if ( frame_type == KEY_FRAME ) {
-        frame_size( )
-        render_size( )
-        @@use_128x128_superblock                                               f(1)
-        @@allow_screen_content_tools                                           f(1)
-        refresh_frame_flags = 0xFF
-        CurrentVideoFrame = 0
-        if (allow_screen_content_tools) {
-            @@seq_choose_integer_mv                                            f(1)
-            if ( seq_choose_integer_mv ) {
-                seq_force_integer_mv = SELECT_INTEGER_MV
-            } else {
-                @@seq_force_integer_mv                                         f(1)
-            }
-        } else {
-            seq_force_integer_mv = 0
-        }
-    } else {
-        if ( frame_type == INTRA_ONLY_FRAME ) {
-            @@allow_screen_content_tools                                       f(1)
-        }
-        if ( frame_type == INTRA_ONLY_FRAME ) {
-            @@refresh_frame_flags                                              f(8)
-            frame_size( )
-            render_size( )
-            @@use_128x128_superblock                                           f(1)
-        } else {
-            if (frame_type == SWITCH_FRAME ) {
-                refresh_frame_flags = 0xFF
-            } else {
-                @@refresh_frame_flags                                          f(8)
-            }
-            for( i = 0; i < REFS_PER_FRAME; i++ ) {
-                @@ref_frame_idx[ i ]                                           f(3)
-                if (frame_type == SWITCH_FRAME ) {
-                    ref_frame_sign_bias[ LAST_FRAME + i ] = 0
-                } else {
-                    @@ref_frame_sign_bias[ LAST_FRAME + i ]                    f(1)
-                }
-                if (frame_id_numbers_present_flag) {
-                    n = delta_frame_id_length_minus2 + 2
-                    @@delta_frame_id_minus1                                    f(n)
-                    DeltaFrameId = delta_frame_id_minus1 + 1
-                    RefFrameId = ((current_frame_id -
-                                  DeltaFrameId ) % (1 << idLen))
-                }
-            }
-            if ( frame_size_override_flag && !error_resilient_mode ) {
-                frame_size_with_refs( )
-            } else {
-                frame_size( )
-                render_size( )
-            }
-            if ( seq_force_integer_mv == SELECT_INTEGER_MV )
-                @@force_integer_mv                                             f(1)
-            else
-                force_integer_mv = seq_force_integer_mv
-            if ( force_integer_mv ) {
-                allow_high_precision_mv = 0
-            } else {
-                @@allow_high_precision_mv                                      f(1)
-            }
-            read_interpolation_filter( )
-            if ( error_resilient_mode ) {
-                can_use_previous = 0
-            } else {
-                @@can_use_previous                                             f(1)
-            }
-        }
-    }
-    if (show_frame == 0) {
-        @@frame_offset_update                                                  f(4)
-        DecodeOrder = CurrentVideoFrame + frame_offset_update
-    } else {
-        DecodeOrder = CurrentVideoFrame
-        CurrentVideoFrame += 1
-    }
-    if ( !FrameIsIntra ) {
-        for( i = 0; i < REFS_PER_FRAME; i++ ) {
-            DecodeOrders[ LAST_FRAME + i ] = RefDecodeOrder[ ref_frame_idx[ i ] ]
-        }
-    }
-    if ( error_resilient_mode ) {
-        frame_parallel_decoding_mode = 1
-    } else {
-        @@frame_parallel_decoding_mode                                         f(1)
-    }
-    if ( FrameIsIntra || error_resilient_mode ) {
-        setup_past_independence ( )
-    } else {
-        load_cdfs( ref_frame_idx[ 0 ] )
-        load_previous( )
-    }
-    loop_filter_params( )
-    quantization_params( )
-    segmentation_params( )
-    delta_q_params( )
-    AllLossless = 1
-    for ( segmentId = 0; segmentId < MAX_SEGMENTS; segmentId++ ) {
-        qindex = get_qindex( 1, segmentId )
-        LosslessArray[ segmentId ] = qindex == 0 && deltaQYDc == 0 && deltaQUVAc == 0 && deltaQUVDc == 0
-        if ( !LosslessArray[ segmentId ] )
-            AllLossless = 0
-        if ( using_qmatrix ) {
-            if ( LosslessArray[ segmentId ] ) {
-                qmLevel = 15
-            } else {
-                qmLevel = min_qmlevel + ( base_q_idx * ( max_qmlevel - min_qmlevel + 1 ) ) / 256
-            }
-            SegQMLevel[ segmentId ] = qmLevel
-        }
-    }
-    delta_lf_params( )
-    cdef_params( )
-    lr_params( )
-    read_tx_mode( )
-    global_motion_params( )
-    frame_reference_mode( )
-    @@reduced_tx_set                                                           f(1)
-    tile_info( )
-}").
 
 Definition tokenize_pseudocode (pc : pseudocode) : list token :=
   match pc with
