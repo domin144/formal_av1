@@ -113,6 +113,7 @@ Definition isAlpha (c : ascii) : bool :=
 Definition isDigit (c : ascii) : bool :=
   let n := nat_of_ascii c in
      andb (48 <=? n) (n <=? 57).
+
 Inductive chartype := white | endline | alpha | digit | other.
 Definition classifyChar (c : ascii) : chartype :=
   if isWhite c then
@@ -125,15 +126,19 @@ Definition classifyChar (c : ascii) : chartype :=
     digit
   else
     other.
+
 Fixpoint list_of_string (s : string) : list ascii :=
   match s with
   | EmptyString => []
   | String c s => c :: (list_of_string s)
   end.
+
 Fixpoint string_of_list (xs : list ascii) : string :=
   fold_right String EmptyString xs.
+
 Definition reserved_words :=
   ["if"; "else"; "do"; "while"; "for"; "return"]%string.
+
 Fixpoint is_valid_identifier (s : string) : bool :=
   match s with
     | EmptyString => false
@@ -144,11 +149,13 @@ Fixpoint is_valid_identifier (s : string) : bool :=
         (list_of_string s')
       && beq_nat (count_occ string_dec reserved_words s) 0
   end.
+
 Definition token := string.
 Definition endline_char : ascii :=
   ascii_of_nat 10.
 Definition endline_token : token :=
   string_of_list [endline_char].
+
 Fixpoint tokenize_helper (cls : chartype) (acc xs : list ascii)
                        : list (list ascii) :=
   let tk := match acc with [] => [] | _::_ => [ rev acc ] end in
@@ -170,12 +177,10 @@ Fixpoint tokenize_helper (cls : chartype) (acc xs : list ascii)
       tk ++ ["}"]::(tokenize_helper other [] xs')
     | _, _, ";" =>
       tk ++ [";"]::(tokenize_helper other [] xs')
+    | endline, white, _ =>
+      tokenize_helper endline (" " :: acc) xs'
     | _, white, _ =>
       tk ++ (tokenize_helper white [] xs')
-    | endline, endline, _ =>
-      tokenize_helper endline [endline_char] xs'
-    | _, endline, _ =>
-      tk ++ (tokenize_helper endline [endline_char] xs')
     | alpha,alpha,x =>
       tokenize_helper alpha (x::acc) xs'
     | digit,digit,x =>
@@ -190,27 +195,96 @@ Fixpoint tokenize_helper (cls : chartype) (acc xs : list ascii)
       tk ++ (tokenize_helper tp [x] xs')
     end
   end %char.
-Definition tokenize (s : string) : list string :=
+
+(* Keeps line breaks with spaces following them. *)
+Definition tokenize_break (s : string) : list string :=
   map string_of_list (tokenize_helper white [] (list_of_string s)).
+
+Definition decompose_endline (x : token) : option nat :=
+  match list_of_string x with
+  | [] => None (* invalid: empty token *)
+  | y :: ys =>
+    if isEndLine y
+    then Some (List.length ys)
+    else None
+  end.
+
+Fixpoint filter_double_breaks (xs : list string) (acc : option string) : list string :=
+  match acc with
+  | None =>
+    match xs with
+    | [] => []
+    | x :: xs' =>
+      match decompose_endline x with
+      | None => x :: filter_double_breaks xs' None
+      | Some n => filter_double_breaks xs' (Some x)
+      end
+    end
+  | Some acc2 =>
+    match xs with
+    | [] => [acc2]
+    | x :: xs' =>
+      match decompose_endline x with
+      | None => acc2 :: x :: filter_double_breaks xs' None
+      | Some n => filter_double_breaks xs' (Some x)
+      end
+    end
+  end %string.
+
+Fixpoint filter_breaks (ident_level : nat) (xs : list string) : list string :=
+  match xs with
+  | [] => []
+  | "{" :: x :: xs' =>
+    match list_of_string x with
+    | [] => [] (* invalid: empty token *)
+    | y :: ys' =>
+      if isEndLine y
+      then "{" :: endline_token :: filter_breaks (List.length ys') xs'
+      else "{" :: x :: filter_breaks ident_level xs'
+    end
+  | x :: xs' =>
+    match list_of_string x with
+    | [] => [] (* invalid: empty token *)
+    | y :: ys' =>
+      if isEndLine y
+      then
+        if (List.length ys') <=? ident_level
+        then endline_token :: filter_breaks (List.length ys') xs'
+        else filter_breaks ident_level xs'
+      else x :: filter_breaks ident_level xs'
+    end
+  end %string.
+
+Definition tokenize (s : string) : list string :=
+  filter_breaks 0 (filter_double_breaks (tokenize_break s) None).
+
 Example tokenize_ex1 :
     tokenize "abc12=3 223*(3+(a+c))" %string
   = ["abc12"; "="; "3"; "223";
        "*"; "("; "3"; "+"; "(";
        "a"; "+"; "c"; ")"; ")"]%string.
 Proof. reflexivity. Qed.
+
 Example tokenize_ex2 :
   tokenize "for ( i = 0; i < 2; i++ ) {
                 @@update_mode_delta                                        f(1)
                 if ( update_mode_delta == 1 )
                     @@loop_filter_mode_deltas[ i ]                         su(6)
+                palette_colors_u[ idx ] = 
+                        Clip1( palette_colors_u[ idx - 1 ] +
+                               palette_delta_u )
             }"%string
   = [ "for"; "("; "i"; "="; "0"; ";"; "i"; "<"; "2"; ";"; "i"; "++"; ")"; "{";
       endline_token;
       "@@"; "update_mode_delta"; "f"; "("; "1"; ")"; endline_token;
-      "if"; "("; "update_mode_delta"; "=="; "1"; ")"; endline_token;
+      "if"; "("; "update_mode_delta"; "=="; "1"; ")";
       "@@"; "loop_filter_mode_deltas"; "["; "i"; "]"; "su"; "("; "6"; ")";
       endline_token;
-      "}" ]%string.
+      "palette_colors_u"; "["; "idx"; "]"; "=";
+      "Clip1"; "("; "palette_colors_u"; "["; "idx"; "-"; "1"; "]"; "+";
+      "palette_delta_u"; ")"; endline_token;
+      "}"
+    ]%string.
 Proof. reflexivity. Qed.
 
 Definition beq_token (s1 s2 : token) : bool :=
@@ -471,7 +545,6 @@ with parse_operator_expression
           | Some e => SomeE (e, xs)
           end ;
         DO (op, xs) <-- parse_operator opps_at_level xs ;
-          DO (_, xs) <== ignore_optional endline_token xs;
           DO (e2, xs) <== parse_operator_expression steps' other_opps None xs ;
           parse_operator_expression
             steps'
@@ -484,12 +557,10 @@ with parse_operator_expression
         DO (e1, xs) <== parse_operator_expression steps' other_opps None xs ;
         DO (op, xs) <--
           parse_operator opps_at_level xs ;
-          DO (_, xs) <== ignore_optional endline_token xs;
           DO (e2, xs) <== parse_operator_expression steps' opps_left None xs ;
           match op with
           | (ano_so so_tunrary) =>
             DO (_, xs) <== expect ":" xs ;
-            DO (_, xs) <== ignore_optional endline_token xs;
             DO (e3, xs) <== parse_operator_expression steps' opps_left None xs ;
             SomeE (expr_op1n op e1 [e2; e3], xs)
           | _ =>
@@ -813,7 +884,6 @@ with parse_stmt_while
     DO (_, xs) <== expect "(" xs;
     DO (e, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ")" xs;
-    DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements, xs) <== parse_stmt steps' xs;
     SomeE (stmt_while e statements, xs)
   end
@@ -825,7 +895,6 @@ with parse_stmt_do_while
   | 0 => NoneE "Too many recursive calls"
   | S steps' =>
     DO (_, xs) <== expect "do" xs;
-    DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements, xs) <== parse_stmt steps' xs;
     DO (_, xs) <== expect "while" xs;
     DO (_, xs) <== expect "(" xs;
@@ -845,10 +914,8 @@ with parse_stmt_if
     DO (_, xs) <== expect "(" xs;
     DO (e, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ")" xs;
-    DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements_if, xs) <== parse_stmt steps' xs;
     DO (_, xs) <-- expect "else" xs;
-      DO (_, xs) <== ignore_optional endline_token xs;
       DO (statements_else, xs) <== parse_stmt steps' xs;
       SomeE (stmt_if_else e statements_if statements_else, xs)
     OR
@@ -869,7 +936,6 @@ with parse_stmt_for
     DO (_, xs) <== expect ";" xs;
     DO (e_2, xs) <== parse_expression steps' xs;
     DO (_, xs) <== expect ")" xs;
-    DO (_, xs) <== ignore_optional endline_token xs;
     DO (statements, xs) <== parse_stmt steps' xs;
     SomeE (stmt_for e_0 e_1 e_2 statements, xs)
   end.
