@@ -1000,6 +1000,7 @@ Fixpoint parse_array_contents
     | 0 => NoneE "invalid depth"
     | 1 =>
       DO (es, xs) <== many_separated_custom_parser (parse_expression steps') parse_argument_separator steps' xs;
+      DO (_, xs) <== ignore_optional "," xs;
       DO (_, xs) <== ignore_optional endline_token xs;
       DO (_, xs) <== expect "}" xs;
       SomeE (es, xs)
