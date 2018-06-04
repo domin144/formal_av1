@@ -30,9 +30,7 @@ Module Syntax_processor.
 Definition definitionsE :=
   (map Parser.parse_pseudocode syntax_pseudocodes).
 
-Compute definitionsE.
-
-(* Theorem all_definitions_parsed :
+Theorem all_definitions_parsed :
   forallb
     (
       fun x => match x with
@@ -40,9 +38,7 @@ Compute definitionsE.
       | _ => false
       end)
     definitionsE = true.
-Proof. *)
-(* TODO *)
-
+Proof. reflexivity. Qed.
 
 Definition state := Parser.token -> Z.
 

@@ -40,7 +40,10 @@ Inductive assignment_operator : Type :=
   | aso_addassign
   | aso_subassign
   | aso_mulassign
-  | aso_divassign.
+  | aso_divassign
+  | aso_borassign
+  | aso_bandassign
+  | aso_xorassign.
 
 Inductive special_operator : Type :=
   | so_function_call

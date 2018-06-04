@@ -27,6 +27,9 @@ Definition opps :
         opp (ano_aso aso_subassign) "-=";
         opp (ano_aso aso_mulassign) "*=";
         opp (ano_aso aso_divassign) "/=";
+        opp (ano_aso aso_borassign) "|=";
+        opp (ano_aso aso_bandassign) "&=";
+        opp (ano_aso aso_xorassign) "^=";
         opp (ano_so so_tunrary) "?"
       ]);
     ( bd_left_to_right,
@@ -255,8 +258,29 @@ Fixpoint filter_breaks (ident_level : nat) (xs : list string) : list string :=
     end
   end %string.
 
+Fixpoint filter_comments (comment_open : bool) (xs : list string) : list string :=
+  match xs with
+  | [] => []
+  | x :: xs' =>
+    if comment_open
+    then
+      match decompose_endline x with
+      | Some _ => x :: filter_comments false xs'
+      | None => filter_comments true xs'
+      end
+    else
+      match x with
+      | "//" => filter_comments true xs'
+      | _ => x :: filter_comments false xs'
+      end
+  end %string.
+
 Definition tokenize (s : string) : list string :=
-  filter_breaks 0 (filter_double_breaks (tokenize_break s) None).
+  filter_breaks 0 
+    (
+      filter_double_breaks
+        (filter_comments false (tokenize_break s))
+        None).
 
 Example tokenize_ex1 :
     tokenize "abc12=3 223*(3+(a+c))" %string
@@ -270,7 +294,8 @@ Example tokenize_ex2 :
                 @@update_mode_delta                                        f(1)
                 if ( update_mode_delta == 1 )
                     @@loop_filter_mode_deltas[ i ]                         su(6)
-                palette_colors_u[ idx ] = 
+                // some comment
+                palette_colors_u[ idx ] = // another comment
                         Clip1( palette_colors_u[ idx - 1 ] +
                                palette_delta_u )
             }"%string
@@ -1007,6 +1032,7 @@ Fixpoint parse_array_contents
     | S depth' =>
       DO (ll, xs) <==
         many_separated_custom_parser (parse_array_contents depth' steps') parse_argument_separator steps' xs;
+      DO (_, xs) <== ignore_optional "," xs;
       DO (_, xs) <== ignore_optional endline_token xs;
       DO (_, xs) <== expect "}" xs;
       SomeE (concat ll, xs)
