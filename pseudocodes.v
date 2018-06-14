@@ -3304,8 +3304,11 @@ decode_subexp_bool( numSyms, k ) {
 }
 ".
 
-Definition syntax_pseudocodes :=
+Definition all_pseudocodes :=
   [
+    global_constants_pseudocode;
+    formulas_pseudocode;
+    ae_unsigned_decode_pseudocode;
     syntax_pseudocode_open_bitstream_unit;
     syntax_pseudocode_obu_header;
     syntax_pseudocode_obu_extension_header;
