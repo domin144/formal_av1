@@ -19,6 +19,7 @@
  *)
 
 Require Import List ZArith.
+Require Vector.
 Import ListNotations.
 
 Require Import basic_types.
@@ -35,12 +36,8 @@ Section frame_def.
 Open Scope Z_scope.
 Inductive frame :=
   | frame_intro :
-    forall (width height planes : Z),
-      (0 < width) -> (0 < height) -> (0 < planes) ->
-      (
-        forall (x y c : Z),
-          (0 <= x < width) -> (0 <= y < height) -> (0 <= c < planes) -> Z) ->
-        frame.
+    forall (width height planes : nat),
+      Vector.t (Vector.t (Vector.t Z width) height) planes -> frame.
 End frame_def.
 
 Definition tile := frame.
