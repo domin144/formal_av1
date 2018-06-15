@@ -1,0 +1,69 @@
+Loose notes for me and anybody else trying to formalize or implement
+encoder/decoder conformant to AV1 specification.
+
+## general_notes
+
+# spec_is_transcription
+AV1 specification seems like being a transcription of already existing reference 
+software. This is similar to VP9 specification.
+
+# coded_decoded_relation
+What I expect from coding format specification is: "A decoded stream matches a
+coded bitstream when ...". This is a binary relation (as in mathematics) on the
+set of coded bitstreams and decoded video streams.
+
+# coding_format_functionality_requirement
+[coded_decoded_relation] For a coding format to be valid, the relation should be
+a function on a subset of coded bitstreams (called conformant bitstreams).
+
+# av1_spec_approach_with_decoder
+The AV1 specification implements above indirectly in this way: "A decoded stream
+matches a coded bitstream when it is equal to output of a conformant decoder.
+A decoder is conformant, when it conforms to following requirements: ...".
+The advantage of this approach is that functionality of coded/decoded stream
+relation [coding_format_functionality_requirement] follows immediately from the
+existance of a conformant decoder. This approach is common to most other known
+video coding specifications (MPEG, VP9, etc.).
+
+# av1_spec_alternative_without_decoder
+Alternative to [av1_spec_approach_with_decoder] is to define relation between
+coded bitstream and decoded stream directly without notion of decoder. Later,
+the decoder conformance could be defined as "For a coded bitstream and a decoded
+stream satisfying [coded_decoded_relation], a result of conformant decoder
+taking the coded bitstream should be the decoded stream."
+
+# subset_decoding_formulation
+[av1_spec_approach_with_decoder] results in formulations:
+"... a conformant decoder is required to be able to decode bitstreams consisting
+of ..."
+instead of
+"Given a coded bitstream and a decoded stream matching the coded bitstream,
+conformant decoder should be able to produce some subset of 
+
+# many_decode_functions
+A conformant decoder is required to realize multiple functions refered to as
+"General decoding process", "Large scale tile decoding process",
+"decoding from a key frame" and possibly more. It is not trivial to list them
+all based on the specification as they are scattered through the text. It has to
+be inferred from the context, which decode function is being specified in the
+statements.
+
+# decode_function_relations
+Given [av1_spec_approach_with_decoder], relations seem to be as follows:
+- definition of [coded_decode_relation] depends on "general decoding process"
+- definitions of "Large scale tile decoding process", "Large scale tile decoding
+process", etc. depend on [coded_decode_relation]
+
+# decode_functions_alternative_relations
+In [av1_spec_alternative_without_decoder], relations could be:
+- definitions of "general decoding process", "Large scale tile decoding
+process", "Large scale tile decoding process", etc. could all depend on
+[coded_decode_relation]
+
+## Syntax
+
+# absent_semicolons
+Absence of semicolons at the end of statements complicates parsing process. For
+now, I base the statement termination on identation of the next line. Any line,
+which is more idented than the current one, is parsed as continuation of the
+current one. Exception to this, is when current line ends with "{".
