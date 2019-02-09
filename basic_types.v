@@ -48,7 +48,7 @@ Inductive assignment_operator : Type :=
 Inductive special_operator : Type :=
   | so_function_call
   | so_subscript
-  | so_tunrary.
+  | so_turnary.
 
 Inductive any_operator :=
   | ano_ao : arithmetic_operator -> any_operator
@@ -90,3 +90,8 @@ Inductive declaration : Type :=
   | decl_constant_array :
     string -> list expression -> list expression -> declaration
   | decl_function : string -> list string -> statement -> declaration.
+
+Inductive bit := bit_0 | bit_1.
+Inductive byte :=
+  byte_intro : forall (_ _ _ _ _ _ _ _ : bit), byte.
+Definition bitstream := list byte.

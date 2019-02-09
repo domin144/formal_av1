@@ -57,7 +57,7 @@ process", etc. depend on [coded_decode_relation]
 # decode_functions_alternative_relations
 In [av1_spec_alternative_without_decoder], relations could be:
 - definitions of "general decoding process", "Large scale tile decoding
-process", "Large scale tile decoding process", etc. could all depend on
+process", scalable decoding, etc. could all depend on
 [coded_decode_relation]
 
 ## Syntax
@@ -67,3 +67,14 @@ Absence of semicolons at the end of statements complicates parsing process. For
 now, I base the statement termination on identation of the next line. Any line,
 which is more idented than the current one, is parsed as continuation of the
 current one. Exception to this, is when current line ends with "{".
+
+# bitwise_right_shift_with_msb
+Bitwise right shift is defined to replicate msb in unsigned value, but does not 
+specify how many bits are considered to be present and so, which one it the msb.
+
+# bitwise_with_negative
+Undefined result of bitwise operators on negative values.
+
+# spurious_block_decoded
+BlockDecoded[ plane ][ sbSize4 >> subY ][ -1 ] = 0 in clear_block_decoded_flags
+seems to be unnecessary as loop above should always set the value to 0.

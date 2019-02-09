@@ -23,20 +23,31 @@ Theorem all_definitions_parsed :
     definitionsE = true.
 Proof. reflexivity. Qed.
 
-(* An identifier may refere to either a single variable, array of variables,
-   or declaration (of function, of constant or of array of constants). *)
-Inductive value :=
-  | val_variable : Z -> value
-  | val_array : (list Z -> Z) -> value
-  | val_decl : declaration -> value.
-Definition state := partial_map value.
+(* An expression might evaluate to reference to single variable or array element.
+   Reference to single variable is label with empty subscrtip list. *)
+Inductive reference :=
+  | ref_variable : string -> list Z -> reference.
 
-Example state_update_notation_ex0 :
-  empty & {{ "a"%string --> (val_variable 3) }} "a"%string = Some (val_variable 3).
+Definition state := reference -> Z.
+
+Definition empty_state (ref : reference) : Z := 0.
+
+Example state_ex0 :
+  empty_state (ref_variable "terefere" nil) = 0%Z.
 Proof. reflexivity. Qed.
 
 Reserved Notation "e '//' st '\\' st' \\ x" (at level 50, left associativity).
 Reserved Notation "s '/' st '\\' st'" (at level 40, st at level 39).
+
+Inductive eval_expr : expression -> state -> state -> value -> Prop :=
+  | eval_expr_number :
+    forall st x,
+      expr_number x // st \\ st \\ val_variable x
+  | eval_expr_variable :
+    forall st label x,
+      st label = Some (val_variable x) ->
+        expr_variable label // st \\ st \\ val_variable x
+where "e '//' st '\\' st' '\\' v" := (eval_expr e st st' v).
 
 (* TODO: add more rules *)
 Inductive
@@ -44,12 +55,19 @@ Inductive
   | eval_stmt_expression :
     forall st st' e v,
       e // st \\ st' \\ v ->
-      stmt_expression e / st \\ st'
+        stmt_expression e / st \\ st'
+  | eval_stmt_syntax_element_simple :
+    forall label pd,
+       stmt_syntax_element (expr_variable label) / st \\ st & 
 with
   eval_expr : expression -> state -> state -> value -> Prop :=
   | eval_expr_number :
     forall st x,
       expr_number x // st \\ st \\ val_variable x
+  | eval_expr_variable :
+    forall st label x,
+      st label = Some (val_variable x) ->
+        expr_variable label // st \\ st \\ val_variable x
 where "c '/' st '\\' st'" := (eval_stmt c st st')
 and "e '//' st '\\' st' '\\' v" := (eval_expr e st st' v).
 

@@ -30,7 +30,7 @@ Definition opps :
         opp (ano_aso aso_borassign) "|=";
         opp (ano_aso aso_bandassign) "&=";
         opp (ano_aso aso_xorassign) "^=";
-        opp (ano_so so_tunrary) "?"
+        opp (ano_so so_turnary) "?"
       ]);
     ( bd_left_to_right,
       [
@@ -584,7 +584,7 @@ with parse_operator_expression
           parse_operator opps_at_level xs ;
           DO (e2, xs) <== parse_operator_expression steps' opps_left None xs ;
           match op with
-          | (ano_so so_tunrary) =>
+          | (ano_so so_turnary) =>
             DO (_, xs) <== expect ":" xs ;
             DO (e3, xs) <== parse_operator_expression steps' opps_left None xs ;
             SomeE (expr_op1n op e1 [e2; e3], xs)
@@ -742,12 +742,12 @@ Example parse_expression_ex_7 :
   parse_expression 100 (tokenize "1 ? 2 : 3 ? 4 : 5")
   = SomeE (
     expr_op1n
-      (ano_so so_tunrary)
+      (ano_so so_turnary)
       (expr_number 1)
       [
         (expr_number 2);
         expr_op1n
-          (ano_so so_tunrary)
+          (ano_so so_turnary)
           (expr_number 3)
           [(expr_number 4); (expr_number 5)]],
     []).
