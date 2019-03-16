@@ -1035,7 +1035,7 @@ Fixpoint parse_array_contents
       DO (_, xs) <== ignore_optional "," xs;
       DO (_, xs) <== ignore_optional endline_token xs;
       DO (_, xs) <== expect "}" xs;
-      SomeE (concat ll, xs)
+      SomeE (List.concat ll, xs)
     end
   end.
 

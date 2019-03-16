@@ -4,9 +4,7 @@ Import ListNotations.
 Require Import basic_types.
 Require Import pseudocodes.
 Require Import parser.
-(* Maps are copied from logical foundations.
-   TODO: Might want to replace with FMapAVL. *)
-Require Import Maps.
+Require Import state.
 
 Module syntax_processor.
 
@@ -23,30 +21,94 @@ Theorem all_definitions_parsed :
     definitionsE = true.
 Proof. reflexivity. Qed.
 
-(* An expression might evaluate to reference to single variable or array element.
-   Reference to single variable is label with empty subscrtip list. *)
-Inductive reference :=
-  | ref_variable : string -> list Z -> reference.
-
-Definition state := reference -> Z.
-
-Definition empty_state (ref : reference) : Z := 0.
-
-Example state_ex0 :
-  empty_state (ref_variable "terefere" nil) = 0%Z.
-Proof. reflexivity. Qed.
-
 Reserved Notation "e '//' st '\\' st' \\ x" (at level 50, left associativity).
 Reserved Notation "s '/' st '\\' st'" (at level 40, st at level 39).
 
-Inductive eval_expr : expression -> state -> state -> value -> Prop :=
+Inductive expr_result : Type :=
+  | er_value : Z -> expr_result
+  | er_reference : reference -> expr_result.
+
+Inductive eval_op1_no_side_effect : any_operator -> Z -> Z -> Prop :=
+  | eval_op1_minus_unary :
+    forall x,
+      eval_op1_no_side_effect (ano_ao ao_minus_unary) x (-x)
+  | eval_op1_lo_not :
+    forall x,
+      eval_op1_no_side_effect (ano_lo lo_not) x (match x with | 0%Z => 1%Z | _ => 0%Z end).
+
+(* TODO: bitwise operators *)
+Inductive eval_op2_no_side_effect : any_operator -> Z -> Z -> Z -> Prop :=
+  | eval_op2_plus :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ao ao_plus) x0 x1 (x0 + x1)
+  | eval_op2_minus :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ao ao_minus) x0 x1 (x0 - x1)
+  | eval_op2_mult :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ao ao_mult) x0 x1 (x0 * x1)
+  | eval_op2_div :
+    forall x0 x1,
+      x1 <> 0%Z ->
+        eval_op2_no_side_effect (ano_ao ao_div) x0 x1 (Z.quot x0 x1)
+  | eval_op2_mod :
+    forall x0 x1,
+      (x0 >= 0)%Z ->
+        (x1 > 0)%Z ->
+          eval_op2_no_side_effect (ano_ao ao_mod) x0 x1 (Z.rem x0 x1)
+  | eval_op2_and :
+    forall x0 x1,
+      eval_op2_no_side_effect
+        (ano_lo lo_and)
+        x0
+        x1
+        (match x0, x1 with | 0%Z, _ => 0%Z | _, 0%Z => 0%Z | _, _ => 1%Z end)
+  | eval_op2_or :
+    forall x0 x1,
+      eval_op2_no_side_effect
+        (ano_lo lo_or)
+        x0
+        x1
+        (match x0, x1 with | 0%Z, 0%Z => 0%Z | _, _ => 1%Z end)
+  | eval_op2_gt :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ro ro_gt) x0 x1 (if Z.gtb x0 x1 then 1%Z else 0%Z)
+  | eval_op2_ge :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ro ro_ge) x0 x1 (if Z.geb x0 x1 then 1%Z else 0%Z)
+  | eval_op2_lt :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ro ro_lt) x0 x1 (if Z.ltb x0 x1 then 1%Z else 0%Z)
+  | eval_op2_le :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ro ro_le) x0 x1 (if Z.leb x0 x1 then 1%Z else 0%Z)
+  | eval_op2_eq :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ro ro_eq) x0 x1 (if Z.eqb x0 x1 then 1%Z else 0%Z)
+  | eval_op2_neq :
+    forall x0 x1,
+      eval_op2_no_side_effect (ano_ro ro_gt) x0 x1 (if Z.eqb x0 x1 then 0%Z else 1%Z).
+
+(* TODO: add more rules *)
+(* Note: order of evaluation of subexpressions is fixed:
+   left first, then right. *)
+Inductive eval_expr : expression -> state -> state -> expr_result -> Prop :=
   | eval_expr_number :
     forall st x,
-      expr_number x // st \\ st \\ val_variable x
+      expr_number x // st \\ st \\ er_value x
   | eval_expr_variable :
-    forall st label x,
-      st label = Some (val_variable x) ->
-        expr_variable label // st \\ st \\ val_variable x
+    forall st label,
+      expr_variable label // st \\ st \\ er_reference (ref_variable label [])
+  | eval_expr_plus :
+    forall e0 e1 x0 x1 st0 st1 st2,
+      e0 // st0 \\ st1 \\ er_value x0 ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          expr_op2 (ano_ao ao_plus) e0 e1 // st0 \\ st2 \\ er_value (x0 + x1)
+  | eval_expr_reference :
+    forall st ref x e,
+      st ref = Some x ->
+        e // st \\ st \\ er_reference ref ->
+          e // st \\ st \\ er_value x
 where "e '//' st '\\' st' '\\' v" := (eval_expr e st st' v).
 
 (* TODO: add more rules *)

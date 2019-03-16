@@ -303,6 +303,11 @@ End string_as_OT.
 
 (* An expression might evaluate to reference to single variable or array element.
    Reference to single variable is label with empty subscrtip list. *)
+(* Reference may olso refer to an array with no or incomplete subscript list.
+   For such reference, valid state will always return "None", but the reference
+   can be used in subscript expression to form reference with extended subscrpt
+   list. Subscript operations can be repeated until the subscript list is
+   complete. *)
 Inductive reference :=
   | ref_variable : string -> list Z -> reference.
 
@@ -325,3 +330,11 @@ Module reference_as_OT <: OrderedType.
   End reference_as_OT_local.
   Include reference_as_OT_local.as_OT.
 End reference_as_OT.
+
+Definition state := reference -> option Z.
+
+Definition empty_state (ref : reference) : option Z := None.
+
+Example state_ex0 :
+  empty_state (ref_variable "terefere" nil) = None.
+Proof. reflexivity. Qed.
