@@ -111,6 +111,13 @@ Inductive eval_op2_no_side_effect : any_operator -> Z -> Z -> Z -> Prop :=
       (x1 >= 0)%Z ->
         eval_op2_no_side_effect (ano_bo bo_lshift) x0 x1 (Z.shiftl x0 x1).
 
+Inductive state_update : state -> state -> reference -> Z -> Prop :=
+  | state_update_intro :
+    forall st0 st1 ref x ref_prime,
+      (ref_prime = ref -> st1 ref_prime = Some x)
+      /\ (ref_prime <> ref -> st1 ref_prime = st0 ref_prime) ->
+        state_update st0 st1 ref x.
+
 (* TODO: add more rules *)
 (* Note: order of evaluation of subexpressions is fixed:
    left first, then right. *)
@@ -121,6 +128,12 @@ Inductive eval_expr : expression -> state -> state -> expr_result -> Prop :=
   | eval_expr_variable :
     forall st label,
       expr_variable label // st \\ st \\ er_reference (ref_variable label [])
+  | eval_expr_subscript :
+    forall e0 e1 st0 st1 st2 label indices x,
+      e0 // st0 \\ st1 \\ er_reference (ref_variable label indices) ->
+        e1 // st1 \\ st2 \\ er_value x ->
+          expr_op2 (ano_so so_subscript) e0 e1 // st0 \\ st2 \\
+            er_reference (ref_variable label (indices ++ [x]))
   | eval_expr_op1_no_side_effect :
     forall e x y st0 st1 op,
       e // st0 \\ st1 \\ er_value x ->
@@ -132,6 +145,52 @@ Inductive eval_expr : expression -> state -> state -> expr_result -> Prop :=
         e1 // st1 \\ st2 \\ er_value x1 ->
           eval_op2_no_side_effect op x0 x1 y ->
             expr_op2 (ano_ao ao_plus) e0 e1 // st0 \\ st2 \\ er_value y
+  | eval_expr_assign :
+    forall e0 e1 x st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x ->
+          state_update st2 st3 ref x ->
+            expr_op2 (ano_aso aso_assign) e0 e1 // st0 \\ st3 \\ er_reference ref
+  | eval_expr_postinc :
+    forall e x st0 st1 st2 ref,
+      e // st0 \\ st1 \\ er_reference ref ->
+        st1 ref = Some x ->
+          state_update st1 st2 ref (x + 1) ->
+            expr_op1 (ano_aso aso_postinc) e // st0 \\ st2 \\ er_value x
+  | eval_expr_postdec :
+    forall e x st0 st1 st2 ref,
+      e // st0 \\ st1 \\ er_reference ref ->
+        st1 ref = Some x ->
+          state_update st1 st2 ref (x - 1) ->
+            expr_op1 (ano_aso aso_postinc) e // st0 \\ st2 \\ er_value x
+  | eval_expr_addassign :
+    forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          st2 ref = Some x0 ->
+            state_update st2 st3 ref (x0 + x1) ->
+             expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+  | eval_expr_subassign :
+    forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          st2 ref = Some x0 ->
+            state_update st2 st3 ref (x0 - x1) ->
+             expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+  | eval_expr_mulassign :
+    forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          st2 ref = Some x0 ->
+            state_update st2 st3 ref (x0 * x1) ->
+             expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+  | eval_expr_divassign :
+    forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          st2 ref = Some x0 ->
+            state_update st2 st3 ref (Z.quot x0 x1) ->
+             expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
   | eval_expr_reference :
     forall st ref x e,
       st ref = Some x ->
