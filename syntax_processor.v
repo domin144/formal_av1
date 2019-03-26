@@ -191,6 +191,27 @@ Inductive eval_expr : expression -> state -> state -> expr_result -> Prop :=
           st2 ref = Some x0 ->
             state_update st2 st3 ref (Z.quot x0 x1) ->
              expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+  | eval_expr_borassign :
+    forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          st2 ref = Some x0 ->
+            state_update st2 st3 ref (Z.lor x0 x1) ->
+             expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+  | eval_expr_bandassign :
+    forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          st2 ref = Some x0 ->
+            state_update st2 st3 ref (Z.land x0 x1) ->
+             expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+  | eval_expr_xorassign :
+    forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+      e0 // st0 \\ st1 \\ er_reference ref ->
+        e1 // st1 \\ st2 \\ er_value x1 ->
+          st2 ref = Some x0 ->
+            state_update st2 st3 ref (Z.lxor x0 x1) ->
+             expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
   | eval_expr_reference :
     forall st ref x e,
       st ref = Some x ->
