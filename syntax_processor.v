@@ -122,173 +122,196 @@ Inductive eval_op2_no_side_effect : any_operator -> Z -> Z -> Z -> Prop :=
       (x1 >= 0)%Z ->
         eval_op2_no_side_effect (ano_bo bo_lshift) x0 x1 (Z.shiftl x0 x1).
 
-Inductive state_update : state -> state -> reference -> Z -> Prop :=
-  | state_update_intro :
-    forall st0 st1 ref x ref_prime,
-      (ref_prime = ref -> st1 ref_prime = Some x)
-      /\ (ref_prime <> ref -> st1 ref_prime = st0 ref_prime) ->
-        state_update st0 st1 ref x.
+Module Type State.
+  Parameter state : Type.
+  Parameter resolve : state -> reference -> Z -> Prop.
+  Parameter update : state -> state -> reference -> Z -> Prop.
+  Axiom update_effect :
+    forall st0 st1 ref0 x0,
+      update st0 st1 ref0 x0 -> (
+        resolve st1 ref0 x0
+        /\ (
+          forall ref1 x1,
+            ref1 <> ref0 ->
+              resolve st0 ref1 x1 ->
+                resolve st1 ref1 x1)).
+  Parameter read_bitstream : state -> state -> reference -> parsing_descriptor -> Z -> Prop.
+  Parameter resolve_function : state -> string -> list string -> statement -> Prop.
+End State.
 
-Definition eval_func_type : Type :=
-  state -> state -> string -> list Z -> Z -> Prop.
+Module eval_module (S : State).
 
-Definition eval_expr_type : Type :=
-  expression -> state -> state -> expr_result -> Prop.
+  Definition eval_func_type : Type :=
+    S.state -> S.state -> string -> list Z -> Z -> Prop.
 
-Module eval_expr_module.
+  Definition eval_expr_type : Type :=
+    expression -> S.state -> S.state -> expr_result -> Prop.
 
-  Parameter eval_func_prop : eval_func_type.
+  Module eval_stmt_module.
 
-  Inductive chained_eval_expr (eval_expr_prop : eval_expr_type) : list state -> list expression -> list Z -> Prop :=
-    | chained_eval_expr_nil :
-      forall s,
-        chained_eval_expr eval_expr_prop [s] [] []
-    | chained_eval_expr_more :
-      forall s0 s1 ss e0 es z0 zs,
-        eval_expr_prop e0 s0 s1 (er_value z0) ->
-          chained_eval_expr eval_expr_prop (s1 :: ss) es zs ->
-            chained_eval_expr eval_expr_prop (s0 :: s1 :: ss) (e0 :: es) (z0 :: zs).
+    Parameter eval_func_prop : eval_func_type.
 
-  (* TODO: add more rules *)
-  (* Note: order of evaluation of subexpressions is fixed:
-     left first, then right. *)
-  Inductive eval_expr : eval_expr_type :=
-    | eval_expr_number :
-      forall st x,
-        expr_number x // st \\ st \\ er_value x
-    | eval_expr_variable :
-      forall st label,
-        expr_variable label // st \\ st \\ er_reference (ref_variable label [])
-    | eval_expr_subscript :
-      forall e0 e1 st0 st1 st2 label indices x,
-        e0 // st0 \\ st1 \\ er_reference (ref_variable label indices) ->
-          e1 // st1 \\ st2 \\ er_value x ->
-            expr_op2 (ano_so so_subscript) e0 e1 // st0 \\ st2 \\
-              er_reference (ref_variable label (indices ++ [x]))
-    | eval_expr_op1_no_side_effect :
-      forall e x y st0 st1 op,
-        e // st0 \\ st1 \\ er_value x ->
-          eval_op1_no_side_effect op x y ->
-            expr_op1 op e // st0 \\ st1 \\ er_value y
-    | eval_expr_op2_no_side_effect :
-      forall e0 e1 x0 x1 y st0 st1 st2 op,
-        e0 // st0 \\ st1 \\ er_value x0 ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            eval_op2_no_side_effect op x0 x1 y ->
-              expr_op2 (ano_ao ao_plus) e0 e1 // st0 \\ st2 \\ er_value y
-    | eval_expr_assign :
-      forall e0 e1 x st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x ->
-            state_update st2 st3 ref x ->
-              expr_op2 (ano_aso aso_assign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_postinc :
-      forall e x st0 st1 st2 ref,
-        e // st0 \\ st1 \\ er_reference ref ->
-          st1 ref = Some x ->
-            state_update st1 st2 ref (x + 1) ->
-              expr_op1 (ano_aso aso_postinc) e // st0 \\ st2 \\ er_value x
-    | eval_expr_postdec :
-      forall e x st0 st1 st2 ref,
-        e // st0 \\ st1 \\ er_reference ref ->
-          st1 ref = Some x ->
-            state_update st1 st2 ref (x - 1) ->
-              expr_op1 (ano_aso aso_postinc) e // st0 \\ st2 \\ er_value x
-    | eval_expr_addassign :
-      forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            st2 ref = Some x0 ->
-              state_update st2 st3 ref (x0 + x1) ->
-               expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_subassign :
-      forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            st2 ref = Some x0 ->
-              state_update st2 st3 ref (x0 - x1) ->
-               expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_mulassign :
-      forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            st2 ref = Some x0 ->
-              state_update st2 st3 ref (x0 * x1) ->
-               expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_divassign :
-      forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            st2 ref = Some x0 ->
-              state_update st2 st3 ref (Z.quot x0 x1) ->
-               expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_borassign :
-      forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            st2 ref = Some x0 ->
-              state_update st2 st3 ref (Z.lor x0 x1) ->
-               expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_bandassign :
-      forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            st2 ref = Some x0 ->
-              state_update st2 st3 ref (Z.land x0 x1) ->
-               expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_xorassign :
-      forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
-        e0 // st0 \\ st1 \\ er_reference ref ->
-          e1 // st1 \\ st2 \\ er_value x1 ->
-            st2 ref = Some x0 ->
-              state_update st2 st3 ref (Z.lxor x0 x1) ->
-               expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
-    | eval_expr_reference :
-      forall st ref x e,
-        st ref = Some x ->
-          e // st \\ st \\ er_reference ref ->
-            e // st \\ st \\ er_value x
-    | eval_expr_func :
-      forall st0 states st1 st2 args_expr args_val function_name result,
-        chained_eval_expr eval_expr ([st0] ++ states ++ [st1]) args_expr args_val ->
-          eval_func_prop st1 st2 function_name args_val result ->
-            expr_op1n (ano_so so_function_call) (expr_variable function_name) args_expr // st0 \\ st2 \\ er_value result
-    | eval_expr_turnary_true :
-      forall st0 st1 st2 e0 e1 e2 x er,
-        e0 // st0 \\ st1 \\ er_value x ->
-          x <> 0%Z ->
-            e1 // st1 \\ st2 \\ er ->
-              expr_op1n (ano_so so_turnary) e0 [e1; e2] // st0 \\ st2 \\ er
-    | eval_expr_turnary_false :
-      forall st0 st1 st2 e0 e1 e2 x er,
-        e0 // st0 \\ st1 \\ er_value x ->
-          x = 0%Z ->
-            e2 // st1 \\ st2 \\ er ->
-              expr_op1n (ano_so so_turnary) e0 [e1; e2] // st0 \\ st2 \\ er
-  where "e '//' st '\\' st' '\\' v" := (eval_expr e st st' v).
+    Inductive chained_eval_expr (eval_expr_prop : eval_expr_type) : list S.state -> list expression -> list Z -> Prop :=
+      | chained_eval_expr_nil :
+        forall s,
+          chained_eval_expr eval_expr_prop [s] [] []
+      | chained_eval_expr_more :
+        forall s0 s1 ss e0 es z0 zs,
+          eval_expr_prop e0 s0 s1 (er_value z0) ->
+            chained_eval_expr eval_expr_prop (s1 :: ss) es zs ->
+              chained_eval_expr eval_expr_prop (s0 :: s1 :: ss) (e0 :: es) (z0 :: zs).
 
-End eval_expr_module.
+    (* TODO: add more rules *)
+    (* Note: order of evaluation of subexpressions is fixed:
+       left first, then right. *)
+    Inductive eval_expr : eval_expr_type :=
+      | eval_expr_number :
+        forall st x,
+          expr_number x // st \\ st \\ er_value x
+      | eval_expr_variable :
+        forall st label,
+          expr_variable label // st \\ st \\ er_reference (ref_variable label [])
+      | eval_expr_subscript :
+        forall e0 e1 st0 st1 st2 label indices x,
+          e0 // st0 \\ st1 \\ er_reference (ref_variable label indices) ->
+            e1 // st1 \\ st2 \\ er_value x ->
+              expr_op2 (ano_so so_subscript) e0 e1 // st0 \\ st2 \\
+                er_reference (ref_variable label (indices ++ [x]))
+      | eval_expr_op1_no_side_effect :
+        forall e x y st0 st1 op,
+          e // st0 \\ st1 \\ er_value x ->
+            eval_op1_no_side_effect op x y ->
+              expr_op1 op e // st0 \\ st1 \\ er_value y
+      | eval_expr_op2_no_side_effect :
+        forall e0 e1 x0 x1 y st0 st1 st2 op,
+          e0 // st0 \\ st1 \\ er_value x0 ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              eval_op2_no_side_effect op x0 x1 y ->
+                expr_op2 (ano_ao ao_plus) e0 e1 // st0 \\ st2 \\ er_value y
+      | eval_expr_assign :
+        forall e0 e1 x st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x ->
+              S.update st2 st3 ref x ->
+                expr_op2 (ano_aso aso_assign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_postinc :
+        forall e x st0 st1 st2 ref,
+          e // st0 \\ st1 \\ er_reference ref ->
+            S.resolve st1 ref x ->
+              S.update st1 st2 ref (x + 1) ->
+                expr_op1 (ano_aso aso_postinc) e // st0 \\ st2 \\ er_value x
+      | eval_expr_postdec :
+        forall e x st0 st1 st2 ref,
+          e // st0 \\ st1 \\ er_reference ref ->
+            S.resolve st1 ref x ->
+              S.update st1 st2 ref (x - 1) ->
+                expr_op1 (ano_aso aso_postinc) e // st0 \\ st2 \\ er_value x
+      | eval_expr_addassign :
+        forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              S.resolve st2 ref x0 ->
+                S.update st2 st3 ref (x0 + x1) ->
+                 expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_subassign :
+        forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              S.resolve st2 ref x0 ->
+                S.update st2 st3 ref (x0 - x1) ->
+                 expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_mulassign :
+        forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              S.resolve st2 ref x0 ->
+                S.update st2 st3 ref (x0 * x1) ->
+                 expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_divassign :
+        forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              S.resolve st2 ref x0 ->
+                S.update st2 st3 ref (Z.quot x0 x1) ->
+                 expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_borassign :
+        forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              S.resolve st2 ref x0 ->
+                S.update st2 st3 ref (Z.lor x0 x1) ->
+                 expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_bandassign :
+        forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              S.resolve st2 ref x0 ->
+                S.update st2 st3 ref (Z.land x0 x1) ->
+                 expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_xorassign :
+        forall e0 e1 x0 x1 st0 st1 st2 st3 ref,
+          e0 // st0 \\ st1 \\ er_reference ref ->
+            e1 // st1 \\ st2 \\ er_value x1 ->
+              S.resolve st2 ref x0 ->
+                S.update st2 st3 ref (Z.lxor x0 x1) ->
+                 expr_op2 (ano_aso aso_addassign) e0 e1 // st0 \\ st3 \\ er_reference ref
+      | eval_expr_reference :
+        forall st ref x e,
+          S.resolve st ref x ->
+            e // st \\ st \\ er_reference ref ->
+              e // st \\ st \\ er_value x
+      | eval_expr_func :
+        forall st0 states st1 st2 args_expr args_val function_name result,
+          chained_eval_expr eval_expr ([st0] ++ states ++ [st1]) args_expr args_val ->
+            eval_func_prop st1 st2 function_name args_val result ->
+              expr_op1n (ano_so so_function_call) (expr_variable function_name) args_expr // st0 \\ st2 \\ er_value result
+      | eval_expr_turnary_true :
+        forall st0 st1 st2 e0 e1 e2 x er,
+          e0 // st0 \\ st1 \\ er_value x ->
+            x <> 0%Z ->
+              e1 // st1 \\ st2 \\ er ->
+                expr_op1n (ano_so so_turnary) e0 [e1; e2] // st0 \\ st2 \\ er
+      | eval_expr_turnary_false :
+        forall st0 st1 st2 e0 e1 e2 x er,
+          e0 // st0 \\ st1 \\ er_value x ->
+            x = 0%Z ->
+              e2 // st1 \\ st2 \\ er ->
+                expr_op1n (ano_so so_turnary) e0 [e1; e2] // st0 \\ st2 \\ er
+    where "e '//' st '\\' st' '\\' v" := (eval_expr e st st' v).
 
-(* TODO: add more rules *)
-Inductive
-  eval_stmt : statement -> state -> state -> Prop :=
-  | eval_stmt_expression :
-    forall st st' e v,
-      e // st \\ st' \\ v ->
-        stmt_expression e / st \\ st'
-  | eval_stmt_syntax_element_simple :
-    forall label pd,
-       stmt_syntax_element (expr_variable label) / st \\ st & 
-with
-  eval_expr : expression -> state -> state -> value -> Prop :=
-  | eval_expr_number :
-    forall st x,
-      expr_number x // st \\ st \\ val_variable x
-  | eval_expr_variable :
-    forall st label x,
-      st label = Some (val_variable x) ->
-        expr_variable label // st \\ st \\ val_variable x
-where "c '/' st '\\' st'" := (eval_stmt c st st')
-and "e '//' st '\\' st' '\\' v" := (eval_expr e st st' v).
+    (* TODO: add more rules *)
+    (*
+    Inductive eval_stmt : statement -> state -> state -> Prop :=
+      | eval_stmt_expression :
+        forall st st' e v,
+          e // st \\ st' \\ v ->
+            stmt_expression e / st \\ st'
+      | eval_stmt_syntax_element_simple :
+        forall st0 st1 st2 e ref pd,
+          e // st0 \\ st1 \\ er_reference ref ->
+            expr_op1n (expr_variable 
+           stmt_syntax_element (expr_variable label) / st \\ st & 
+    with
+      eval_expr : expression -> state -> state -> value -> Prop :=
+      | eval_expr_number :
+        forall st x,
+          expr_number x // st \\ st \\ val_variable x
+      | eval_expr_variable :
+        forall st label x,
+          st label = Some (val_variable x) ->
+            expr_variable label // st \\ st \\ val_variable x
+    where "c '/' st '\\' st'" := (eval_stmt c st st')
+    and "e '//' st '\\' st' '\\' v" := (eval_expr e st st' v).
+    *)
+
+  End eval_stmt_module.
+
+  Module eval_func_module.
+
+    Parameter eval_expr : eval_expr_type.
+
+  End eval_func_module.
+
+End eval_module.
 
 End syntax_processor.
