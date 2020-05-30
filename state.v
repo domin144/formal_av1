@@ -1,16 +1,17 @@
 Require Import ZArith.
 Require Import String.
 Require Import Ascii.
-Require Import Relations.
-Require Import Equalities.
-Require Import OrderedType.
-Require Import OrderedTypeEx.
+Require Import Structures.Orders.
+Require Import Structures.OrdersEx.
+Require Import Lists.List.
+
 
 Definition lt_not_eq_prop {X : Type} (eq lt : X -> X -> Prop) : Prop :=
   forall (x y : X),
     lt x y -> ~(eq x y).
 
-Module list_as_MiniOT (X : OrderedType) <: MiniOrderedType.
+
+Module list_as_EqualityType (X : EqualityType) <: EqualityType.
 
   Definition t := list X.t.
 
@@ -23,26 +24,13 @@ Module list_as_MiniOT (X : OrderedType) <: MiniOrderedType.
 
   Definition eq := eq_dummy.
 
-  Inductive lt_dummy : t -> t -> Prop :=
-    | lt_nil :
-      forall h t,
-        lt_dummy nil (h :: t)
-    | lt_h :
-      forall h0 h1 t0 t1,
-        X.lt h0 h1 -> lt_dummy (h0 :: t0) (h1 :: t1)
-    | lt_t :
-      forall h0 h1 t0 t1,
-        X.eq h0 h1 -> lt_dummy t0 t1 -> lt_dummy (h0 :: t0) (h1 :: t1).
-
-  Definition lt := lt_dummy.
-
   Theorem eq_refl : reflexive t eq.
   Proof.
     intros l.
     induction l.
     - apply eq_nil.
     - apply eq_more.
-      + apply X.eq_refl.
+      + apply Equivalence_Reflexive.
       + apply IHl.
   Qed.
 
@@ -59,7 +47,7 @@ Module list_as_MiniOT (X : OrderedType) <: MiniOrderedType.
       + inversion Hy;
           subst.
         apply eq_more.
-        * apply X.eq_sym.
+        * apply Equivalence_Symmetric.
           auto.
         * apply IHl.
           auto.
@@ -76,13 +64,61 @@ Module list_as_MiniOT (X : OrderedType) <: MiniOrderedType.
       inversion H_yz;
         subst.
       apply eq_more.
-      + apply X.eq_trans with h1;
+      + apply Equivalence_Transitive with h1;
           auto.
       + apply IHH_xy.
         auto.
   Qed.
 
-  Theorem lt_trans : transitive t lt.
+  Theorem eq_equiv : Equivalence eq.
+    split.
+    - apply eq_refl.
+    - apply eq_sym.
+    - apply eq_trans.
+  Qed.
+
+End list_as_EqualityType.
+
+Module list_as_DecStrOrder (X : OrderedType) <: DecStrOrder.
+
+  Include list_as_EqualityType X.
+
+  Inductive lt_dummy : t -> t -> Prop :=
+    | lt_nil :
+      forall h t,
+        lt_dummy nil (h :: t)
+    | lt_h :
+      forall h0 h1 t0 t1,
+        X.lt h0 h1 -> lt_dummy (h0 :: t0) (h1 :: t1)
+    | lt_t :
+      forall h0 h1 t0 t1,
+        X.eq h0 h1 -> lt_dummy t0 t1 -> lt_dummy (h0 :: t0) (h1 :: t1).
+
+  Definition lt := lt_dummy.
+
+  Theorem lt_irreflexive : Irreflexive lt.
+  Proof.
+    unfold Irreflexive.
+    unfold Reflexive.
+    intros.
+    intros Hinv.
+    induction x.
+    - inversion Hinv.
+    - inversion Hinv; subst.
+      + apply StrictOrder_Irreflexive with a.
+        auto.
+      + auto.
+  Qed.
+
+  Lemma lt_compat_easy :
+    forall x0 x1 y0 y1, X.eq x0 x1 -> X.eq y0 y1 -> (X.lt x0 y0 <-> X.lt x1 y1).
+  Proof.
+    intros.
+    apply X.lt_compat;
+      auto.
+  Qed.
+
+  Theorem lt_transitive : Transitive lt.
   Proof.
     intros x y z H_xy.
     generalize z.
@@ -94,101 +130,144 @@ Module list_as_MiniOT (X : OrderedType) <: MiniOrderedType.
       inversion H_yz;
         subst.
       + apply lt_h.
-        apply X.lt_trans with h1;
+        apply StrictOrder_Transitive with h1;
           auto.
       + apply lt_h.
-        (* TODO: replace this part with some ready proof on X *)
-        destruct (X.compare h0 h3).
-        * auto.
-        * exfalso.
-          apply X.lt_not_eq with h0 h1; 
-            auto.
-          apply X.eq_trans with h3;
-            auto.
-        * exfalso.
-          apply X.lt_not_eq with h3 h1;
-            auto.
-          apply X.lt_trans with h0;
-            auto.
-    - intros z0 H_yz.
-      inversion H_yz;
-        subst.
-      + apply lt_h.
-        destruct (X.compare h0 h3).
-        * auto.
-        * exfalso.
-          apply X.lt_not_eq with h1 h3;
-            auto.
-          apply X.eq_trans with h0;
-            auto.
-        * exfalso.
-          apply X.lt_not_eq with h1 h0;
-            auto.
-          apply X.lt_trans with h3;
-            auto.
-      + apply lt_t.
-        * apply X.eq_trans with h1;
-            auto.
-        * apply IHH_xy.
+        apply lt_compat_easy with h0 h1.
+        * apply Equivalence_Reflexive.
+        * apply Equivalence_Symmetric.
           auto.
-  Qed.
-
-  Theorem lt_not_eq : lt_not_eq_prop eq lt.
-  Proof.
-    intros x y Hlt Heq.
-    induction Hlt;
-      subst.
-    - inversion Heq.
-    - inversion Heq;
-        subst.
-      apply X.lt_not_eq with h0 h1;
-        auto.
-    - inversion Heq;
-        subst.
-      auto.
-  Qed.
-
-  Definition compare l0 l1 : Compare lt eq l0 l1.
-  Proof.
-    generalize l1.
-    induction l0 as [| h0 t0].
-    - intros l2.
-      destruct l2 as [| h1 t1].
-      + apply EQ.
-        apply eq_refl.
-      + apply LT.
-        apply lt_nil.
-    - intros l2.
-      destruct l2 as [| h1 t1].
-      + apply GT.
-        apply lt_nil.
-      + destruct (X.compare h0 h1).
-        * apply LT.
-          apply lt_h.
-          auto.
-        * destruct IHt0 with t1.
-          { apply LT.
-            apply lt_t;
+        * auto.
+    - intros.
+      destruct z0.
+      + inversion H0.
+      + inversion H0;
+          subst.
+        * apply lt_h.
+          apply lt_compat_easy with h1 t2;
+            auto.
+          apply Equivalence_Reflexive.
+        * apply lt_t.
+          { apply Equivalence_Transitive with h1;
               auto. }
-          { apply EQ.
+          { apply IHH_xy.
+            auto. }
+  Qed.
+
+  Theorem lt_strorder : StrictOrder lt.
+    split.
+    - apply lt_irreflexive.
+    - apply lt_transitive.
+  Qed.
+
+  Theorem lt_compat_half : 
+    forall x0 x1 y0 y1,
+      eq x0 y0 -> eq x1 y1 -> lt x0 x1 -> lt y0 y1.
+    intros x0.
+    induction x0.
+    - intros x1 y0 y1 Heq0 Heq1.
+      inversion Heq0;
+        subst.
+      inversion Heq1;
+        subst.
+      + intro.
+        auto.
+      + intro.
+        apply lt_nil.
+    - intros x1 y0 y1 Heq0 Heq1.
+      inversion Heq0;
+        subst.
+      inversion Heq1;
+        subst.
+      + intro H;
+          inversion H.
+      + intro Hlt.
+        inversion Hlt;
+          subst.
+          * apply lt_h.
+            apply lt_compat_easy with a h0.
+            { apply Equivalence_Symmetric.
+              auto. }
+            { apply Equivalence_Symmetric.
+              auto. }
+            { auto. }
+          * apply lt_t.
+            { apply Equivalence_Transitive with a.
+              - apply Equivalence_Symmetric.
+                auto.
+              - apply Equivalence_Transitive with h0;
+                  auto. }
+            { apply IHx0 with t0;
+                auto. }
+  Qed.
+
+  Theorem lt_compat : Proper (eq==>eq==>iff) lt.
+    intros x0 y0 Heq0 x1 y1 Heq1.
+    split.
+    - apply lt_compat_half;
+        auto.
+    - apply lt_compat_half.
+      + apply (@Equivalence_Symmetric t eq eq_equiv).
+        * auto.
+      + apply (@Equivalence_Symmetric t eq eq_equiv).
+        * auto.
+  Qed.
+
+
+  Fixpoint compare (x y : t) : comparison :=
+    match x, y with
+    | nil, nil => Eq
+    | nil, _ :: _ => Lt
+    | _ :: _, nil => Gt
+    | xh :: xt, yh :: yt => match X.compare xh yh with
+      | Lt => Lt
+      | Gt => Gt
+      | Eq => compare xt yt
+      end
+    end.
+
+  Theorem compare_spec : forall x y, CompareSpec (eq x y) (lt x y) (lt y x) (compare x y).
+    induction x as [| hx tx IH].
+    - destruct y.
+      + apply CompEq.
+        apply eq_nil.
+      + apply CompLt.
+        apply lt_nil.
+    - destruct y as [| hy ty].
+      + apply CompGt.
+        apply lt_nil.
+      + simpl.
+        pose proof (X.compare_spec hx hy) as Hhcomp.
+        inversion Hhcomp;
+          subst.
+        * pose proof (IH ty) as IHt.
+          inversion IHt;
+            subst.
+          { apply CompEq.
             apply eq_more;
               auto. }
-          { apply GT.
+          { apply CompLt.
             apply lt_t;
               auto. }
-        * apply GT.
+          { apply CompGt.
+            apply lt_t.
+            - apply Equivalence_Symmetric.
+              auto.
+            - auto. }
+        * apply CompLt.
+          apply lt_h.
+          auto.
+        * apply CompGt.
           apply lt_h.
           auto.
   Qed.
-End list_as_MiniOT.
 
-Module list_as_OT (X : OrderedType) <: OrderedType.
-  Module list_as_OT_local.
-    Module as_MOT := list_as_MiniOT X.
-    Module as_OT := MOT_to_OT as_MOT.
-  End list_as_OT_local.
-  Include list_as_OT_local.as_OT.
-End list_as_OT.
+End list_as_DecStrOrder.
+
+Module list_as_OrderedType (X : OrderedType) <: OrderedType.
+  Module DSO := list_as_DecStrOrder X.
+  Include DSO_to_OT DSO.
+End list_as_OrderedType.
 
 Module Type mapped_OT (Y : OrderedType).
   Parameter Inline t : Type.
@@ -202,7 +281,7 @@ Module Type mapped_OT (Y : OrderedType).
     Y.lt (f x) (f y).
 End mapped_OT.
 
-Module mapped_to_MOT (Y : OrderedType) (M : mapped_OT Y) <: MiniOrderedType.
+Module mapped_to_MOT (Y : OrderedType) (M : mapped_OT Y) <: OrderedType.
 
   Definition t := M.t.
 
@@ -216,21 +295,45 @@ Module mapped_to_MOT (Y : OrderedType) (M : mapped_OT Y) <: MiniOrderedType.
   Proof.
     intros x.
     unfold eq.
-    apply Y.eq_refl.
+    unfold M.eq.
+    apply Equivalence_Reflexive.
   Qed.
 
   Theorem eq_sym : symmetric t eq.
   Proof.
     intros x y.
     unfold eq.
-    apply Y.eq_sym.
+    unfold M.eq.
+    apply Equivalence_Symmetric.
   Qed.
 
   Theorem eq_trans : transitive t eq.
   Proof.
     intros x y z.
     unfold eq.
-    apply Y.eq_trans.
+    unfold M.eq.
+    apply Equivalence_Transitive.
+  Qed.
+  
+  Theorem eq_equiv : Equivalence eq.
+    split.
+    - apply eq_refl.
+    - apply eq_sym.
+    - apply eq_trans.
+  Qed.
+
+  Theorem lt_irreflexive : Irreflexive lt.
+    intros x Hinv.
+    unfold lt in Hinv.
+    unfold M.lt in Hinv.
+    apply (@StrictOrder_Irreflexive Y).
+  
+  Theorem lt_transitive : Transitive lt.
+  
+  Theorem lt_strorder : StrictOrder lt.
+    split.
+    - apply lt_irreflexive.
+    - apply lt_transitive.
   Qed.
 
   Theorem lt_trans : transitive t lt.
