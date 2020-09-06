@@ -27,9 +27,6 @@ Require Import pseudocodes.
 Require Import parser.
 Require Import syntax_processor.
 
-Inductive bit := bit_0 | bit_1.
-Inductive byte :=
-  byte_intro : forall (_ _ _ _ _ _ _ _ : bit), byte.
 Definition open_bitstream_unit := list byte.
 
 Section frame_def.

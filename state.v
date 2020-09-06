@@ -213,7 +213,6 @@ Module list_as_DecStrOrder (X : OrderedType) <: DecStrOrder.
         * auto.
   Qed.
 
-
   Fixpoint compare (x y : t) : comparison :=
     match x, y with
     | nil, nil => Eq
@@ -281,7 +280,7 @@ Module Type mapped_OT (Y : OrderedType).
     Y.lt (f x) (f y).
 End mapped_OT.
 
-Module mapped_to_MOT (Y : OrderedType) (M : mapped_OT Y) <: OrderedType.
+Module mapped_to_DecStrOrder (Y : OrderedType) (M : mapped_OT Y) <: DecStrOrder.
 
   Definition t := M.t.
 
@@ -314,7 +313,7 @@ Module mapped_to_MOT (Y : OrderedType) (M : mapped_OT Y) <: OrderedType.
     unfold M.eq.
     apply Equivalence_Transitive.
   Qed.
-  
+
   Theorem eq_equiv : Equivalence eq.
     split.
     - apply eq_refl.
@@ -326,47 +325,55 @@ Module mapped_to_MOT (Y : OrderedType) (M : mapped_OT Y) <: OrderedType.
     intros x Hinv.
     unfold lt in Hinv.
     unfold M.lt in Hinv.
-    apply (@StrictOrder_Irreflexive Y).
-  
+    apply (StrictOrder_Irreflexive (M.f x)).
+    auto.
+  Qed.
+
   Theorem lt_transitive : Transitive lt.
-  
+    unfold lt.
+    intros x y z Hxy Hyz.
+    unfold M.lt.
+    apply (StrictOrder_Transitive (M.f x) (M.f y) (M.f z)).
+    - auto.
+    - auto.
+  Qed.
+
   Theorem lt_strorder : StrictOrder lt.
     split.
     - apply lt_irreflexive.
     - apply lt_transitive.
   Qed.
 
-  Theorem lt_trans : transitive t lt.
-  Proof.
-    intros x y z.
-    apply Y.lt_trans.
+  Theorem lt_compat : Proper (eq==>eq==>iff) lt.
+    intros x0 x1 Heqx y0 y1 Heqy.
+    unfold lt.
+    unfold M.lt.
+    apply Y.lt_compat.
+    - auto.
+    - auto.
   Qed.
 
-  Theorem lt_not_eq : lt_not_eq_prop eq lt.
+  Definition compare x y := Y.compare (f x) (f y).
+
+  Theorem compare_spec : forall x y, CompareSpec (eq x y) (lt x y) (lt y x) (compare x y).
   Proof.
     intros x y.
-    apply Y.lt_not_eq.
-  Qed.
-
-  Definition compare x y : Compare lt eq x y.
-  Proof.
-    destruct (Y.compare (f x) (f y)).
-    - apply LT.
+    unfold compare.
+    remember (Y.compare_spec (f x) (f y)) as Yc.
+    inversion Yc.
+    - apply CompEq.
       auto.
-    - apply EQ.
+    - apply CompLt.
       auto.
-    - apply GT.
+    - apply CompGt.
       auto.
   Qed.
 
-End mapped_to_MOT.
+End mapped_to_DecStrOrder.
 
 Module mapped_to_OT (Y : OrderedType) (M : mapped_OT Y) <: OrderedType.
-  Module mapped_to_OT_local.
-    Module as_MOT := mapped_to_MOT Y M.
-    Module as_OT := MOT_to_OT as_MOT.
-  End mapped_to_OT_local.
-  Include mapped_to_OT_local.as_OT.
+  Module DSO := mapped_to_DecStrOrder Y M.
+  Include DSO_to_OT DSO.
 End mapped_to_OT.
 
 Module ascii_as_OT <: OrderedType.
@@ -386,7 +393,7 @@ End ascii_as_OT.
 
 Module string_as_OT <: OrderedType.
   Module string_as_OT_local.
-    Module ascii_list_os_OT := list_as_OT ascii_as_OT.
+    Module ascii_list_os_OT := list_as_OrderedType ascii_as_OT.
     Module as_mapped_OT <: mapped_OT ascii_list_os_OT.
       Definition t := string.
       Fixpoint f (s : string) : ascii_list_os_OT.t :=
@@ -416,7 +423,7 @@ Inductive reference :=
 
 Module reference_as_OT <: OrderedType.
   Module reference_as_OT_local.
-    Module list_Z_as_OT := list_as_OT Z_as_OT.
+    Module list_Z_as_OT := list_as_OrderedType Z_as_OT.
     Module pair_as_OT := PairOrderedType string_as_OT list_Z_as_OT.
     Module as_mapped_OT : mapped_OT pair_as_OT.
       Definition t := reference.
