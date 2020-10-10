@@ -136,13 +136,13 @@ Fixpoint list_of_string (s : string) : list ascii :=
   | String c s => c :: (list_of_string s)
   end.
 
-Fixpoint string_of_list (xs : list ascii) : string :=
+Definition string_of_list (xs : list ascii) : string :=
   fold_right String EmptyString xs.
 
 Definition reserved_words :=
   ["if"; "else"; "do"; "while"; "for"; "return"]%string.
 
-Fixpoint is_valid_identifier (s : string) : bool :=
+Definition is_valid_identifier (s : string) : bool :=
   match s with
     | EmptyString => false
     | String x s' =>
@@ -349,7 +349,7 @@ Fixpoint many_helper {T} (p : parser T) acc steps xs :=
       many_helper p (t::acc) steps' xs'
   end.
 
-Fixpoint many {T} (p : parser T) (steps : nat) : parser (list T) :=
+Definition many {T} (p : parser T) (steps : nat) : parser (list T) :=
   many_helper p [] steps.
 
 Definition one_or_more
@@ -394,7 +394,7 @@ Definition ignore_optional
   OR
     SomeE (tt, xs).
 
-Fixpoint many_separated_custom_parser
+Definition many_separated_custom_parser
     {T}
     (p : parser T)
     (separator_parser : parser unit)
@@ -406,7 +406,7 @@ Fixpoint many_separated_custom_parser
   OR
     SomeE ([], xs).
 
-Fixpoint many_separated
+Definition many_separated
     {T}
     (p : parser T)
     (separator : token)
@@ -495,7 +495,7 @@ match xs with
         end
 end.
 
-Fixpoint parse_operator
+Definition parse_operator
     (opps_at_level : list operator_parsing_parameters)
     (xs : list token)
     : optionE (any_operator * list token) :=
@@ -1000,7 +1000,7 @@ Example parse_stmt_ex_2 :
         []).
 Proof. reflexivity. Qed.
 
-Fixpoint parse_array_dimension
+Definition parse_array_dimension
     (steps : nat)
     (xs : list token)
     : optionE (expression * list token) :=
@@ -1039,7 +1039,7 @@ Fixpoint parse_array_contents
     end
   end.
 
-Fixpoint parse_declaration
+Definition parse_declaration
     (steps : nat)
     (xs : list token)
     : optionE (declaration * list token) :=
@@ -1116,7 +1116,7 @@ Definition tokenize_pseudocode (pc : pseudocode) : list token :=
   | pseudocode_intro s => tokenize s
   end.
 
-Fixpoint parse_pseudocode (pc : pseudocode) : optionE (list declaration * list token) :=
+Definition parse_pseudocode (pc : pseudocode) : optionE (list declaration * list token) :=
   let ts := tokenize_pseudocode pc in
   let l := (List.length ts) * 20 in
     many (parse_declaration l) l ts.

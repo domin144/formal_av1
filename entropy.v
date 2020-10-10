@@ -13,8 +13,8 @@ Inductive bitstream_at_relation :
       bitstream_at_relation bs (bitstream_postion_intro byte_index bit_index)
         value.
 
-Inductive read_bit_relation :
+(* Inductive read_bit_relation :
     bitstream -> bitstream_position -> bit -> bitstream_position -> Prop :=
   | read_bit_relation_intro :
     forall bs bp0 b bp1,
-      
+*)

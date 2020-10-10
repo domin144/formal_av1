@@ -39,7 +39,7 @@ Inductive expr_result : Type :=
   | er_value : Z -> expr_result
   | er_reference : reference -> expr_result.
 
-Fixpoint binary_negation (x : Z) : Z := -x - 1.
+Definition binary_negation (x : Z) : Z := -x - 1.
 
 Inductive eval_op1_no_side_effect : any_operator -> Z -> Z -> Prop :=
   | eval_op1_minus_unary :

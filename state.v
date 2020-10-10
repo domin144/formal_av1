@@ -427,7 +427,7 @@ Module reference_as_OT <: OrderedType.
     Module pair_as_OT := PairOrderedType string_as_OT list_Z_as_OT.
     Module as_mapped_OT : mapped_OT pair_as_OT.
       Definition t := reference.
-      Fixpoint f (x : t) : pair_as_OT.t :=
+      Definition f (x : t) : pair_as_OT.t :=
         match x with
         | ref_variable s l => (s, l)
         end.
