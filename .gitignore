@@ -6,3 +6,6 @@
 *.aux
 *.crashcoqide
 .makefile.d
+.CoqMakefile.d
+CoqMakefile.conf
+Makefile.coq

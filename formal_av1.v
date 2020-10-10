@@ -22,10 +22,10 @@ Require Import List ZArith.
 Require Vector.
 Import ListNotations.
 
-Require Import basic_types.
-Require Import pseudocodes.
-Require Import parser.
-Require Import syntax_processor.
+Require Import formal_av1.basic_types.
+Require Import formal_av1.pseudocodes.
+Require Import formal_av1.parser.
+Require Import formal_av1.syntax_processor.
 
 Definition open_bitstream_unit := list byte.
 

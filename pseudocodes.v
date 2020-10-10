@@ -2,7 +2,7 @@ Require Import String.
 Require Import List.
 Import ListNotations.
 
-Require Import basic_types.
+Require Import formal_av1.basic_types.
 
 (* symbols *)
 

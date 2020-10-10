@@ -1,6 +1,6 @@
 Require Import List ZArith.
 
-Require Import basic_types.
+Require Import formal_av1.basic_types.
 
 Inductive bitstream_position :=
   bitstream_postion_intro : Z -> Z -> bitstream_position.
