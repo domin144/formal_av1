@@ -27,8 +27,6 @@ Require Import formal_av1.pseudocodes.
 Require Import formal_av1.parser.
 Require Import formal_av1.syntax_processor.
 
-Definition open_bitstream_unit := list byte.
-
 Section frame_def.
 Open Scope Z_scope.
 Inductive frame :=
@@ -38,23 +36,6 @@ Inductive frame :=
 End frame_def.
 
 Definition tile := frame.
-
-(* Ordering of OBUs *)
-
-(* Inductive temporal_unit :=
-  | temporal_unit_intro :
-    temporal_delimiter ->
-    list sequence_header ->
-    list metadata_obu ->
-    (frame_header * list tile_group_obu * list padding_obu) ->
-    list (frame_header * list tile_group_obu * list padding_obu) ->
-    temporal_unit.
-Inductive coded_video_sequence :=
-  | coded_video_sequence_intro :
-    temporal_unit -> list temporal unit -> coded_video_sequence.
-Inductive bitstream :=
-  | bistream_intro :
-    coded_video_sequece -> list coded_video_sequece -> bitstream. *)
 
 (* The final definitions! *)
 

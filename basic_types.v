@@ -94,4 +94,7 @@ Inductive declaration : Type :=
 Inductive bit := bit_0 | bit_1.
 Inductive byte :=
   byte_intro : forall (_ _ _ _ _ _ _ _ : bit), byte.
-Definition bitstream := list byte.
+
+Definition open_bitstream_unit := list byte.
+
+Definition bitstream := list open_bitstream_unit.
