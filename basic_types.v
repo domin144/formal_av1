@@ -95,6 +95,11 @@ Inductive bit := bit_0 | bit_1.
 Inductive byte :=
   byte_intro : forall (_ _ _ _ _ _ _ _ : bit), byte.
 
+(* Finite nat subset from:
+ * https://coq-club.inria.narkive.com/KRoWJtBf/defining-type-of-a-subset-of-natural-numbers *)
+(* Definition bit_in_byte_index := { n:nat | n < 8 }. *)
+Definition bit_in_byte_index := nat.
+
 Definition open_bitstream_unit := list byte.
 
 Definition bitstream := list open_bitstream_unit.
