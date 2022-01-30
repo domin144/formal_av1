@@ -19,21 +19,12 @@
  *)
 
 Require Import List ZArith.
-Require Vector.
 Import ListNotations.
 
 Require Import formal_av1.basic_types.
 Require Import formal_av1.pseudocodes.
 Require Import formal_av1.parser.
 Require Import formal_av1.syntax_processor.
-
-Section frame_def.
-Open Scope Z_scope.
-Inductive frame :=
-  | frame_intro :
-    forall (width height planes : nat),
-      Vector.t (Vector.t (Vector.t Z width) height) planes -> frame.
-End frame_def.
 
 Definition tile := frame.
 
@@ -45,4 +36,3 @@ Inductive general_decode_relation :
 Inductive large_scale_tile_input := (* TODO *).
 Inductive large_scale_tile_decode_relation :
     large_scale_tile_input -> list tile -> Prop := (* TODO *).
-

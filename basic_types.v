@@ -1,5 +1,7 @@
 Require Import String.
 Require Import ZArith.
+Require Fin.
+Require Vector.
 
 Inductive pseudocode : Type :=
   | pseudocode_intro : string -> pseudocode.
@@ -91,14 +93,17 @@ Inductive declaration : Type :=
     string -> list expression -> list expression -> declaration
   | decl_function : string -> list string -> statement -> declaration.
 
-Inductive bit := bit_0 | bit_1.
-Inductive byte :=
-  byte_intro : forall (_ _ _ _ _ _ _ _ : bit), byte.
+Inductive frame :=
+| frame_intro :
+  forall (width height planes : nat),
+    Vector.t (Vector.t (Vector.t Z width) height) planes -> frame.
 
-(* Finite nat subset from:
- * https://coq-club.inria.narkive.com/KRoWJtBf/defining-type-of-a-subset-of-natural-numbers *)
-(* Definition bit_in_byte_index := { n:nat | n < 8 }. *)
-Definition bit_in_byte_index := nat.
+Definition bits_in_byte_count := 8.
+
+Inductive bit := bit_0 | bit_1.
+Definition byte := Vector.t bit bits_in_byte_count.
+
+Definition bit_in_byte_index := Fin.t bits_in_byte_count.
 
 Definition open_bitstream_unit := list byte.
 
