@@ -9,5 +9,6 @@
         "CoqMakefile": true,
         "CoqMakefile.conf": true,
         "Makefile.coq": true
-    }
+    },
+    "editor.tabSize": 2
 }
