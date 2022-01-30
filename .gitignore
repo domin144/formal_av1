@@ -7,5 +7,6 @@
 *.crashcoqide
 .makefile.d
 .CoqMakefile.d
+CoqMakefile
 CoqMakefile.conf
 Makefile.coq
