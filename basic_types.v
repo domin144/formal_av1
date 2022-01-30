@@ -98,13 +98,19 @@ Inductive frame :=
   forall (width height planes : nat),
     Vector.t (Vector.t (Vector.t Z width) height) planes -> frame.
 
-Definition bits_in_byte_count := 8.
-
 Inductive bit := bit_0 | bit_1.
-Definition byte := Vector.t bit bits_in_byte_count.
 
-Definition bit_in_byte_index := Fin.t bits_in_byte_count.
+Module byte.
 
-Definition open_bitstream_unit := list byte.
+  Definition bits_count := 8.
+
+  Definition t := Vector.t bit bits_count.
+
+  (* Bit index 0 is the least significant one. *)
+  Definition bit_index := Fin.t bits_count.
+
+End byte.
+
+Definition open_bitstream_unit := list byte.t.
 
 Definition bitstream := list open_bitstream_unit.
