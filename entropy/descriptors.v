@@ -66,21 +66,19 @@ Inductive le_decode_relation : nat -> list bit -> nat -> Prop :=
 (* AV-1 spec 4.10.5. leb128() *)
 (* Continuation bit can only be 1, if i < 7. *)
 
-Inductive leb128_helper : nat -> list bit -> nat -> Prop :=
+Inductive leb128_helper (i : nat) : list bit -> nat -> Prop :=
   | leb128_helper_stop_bit :
-    forall i,
     forall data_bits x, f_decode_relation 7 data_bits x ->
     leb128_helper i ([bit_0] ++ data_bits) x
   | leb128_helper_more :
-    forall i, i < 7 ->
+    i < 7 ->
     forall data_bits x, f_decode_relation 7 data_bits x ->
     forall bits_more x_more, leb128_helper (S i) bits_more x_more ->
-    leb128_helper i ([bit_1] ++ data_bits ++ bits_more) (x + 2^7 * x_more).
+    leb128_helper i ([bit_1] ++ data_bits ++ bits_more) (x + 2 ^ 7 * x_more).
 
-Inductive leb128_decode_relation : list bit -> nat -> Prop :=
+Inductive leb128_decode_relation (bits : list bit) (x : nat) : Prop :=
   | leb128_decode_relation_intro :
-    forall bits x,
-    x < 2^32 ->
+    x < 2 ^ 32 ->
     leb128_helper 0 bits x ->
     leb128_decode_relation bits x.
 
@@ -98,3 +96,31 @@ Inductive su_decode_relation : nat -> list bit -> Z -> Prop :=
       (S i)
       ([bit_1] ++ bits)
       (- (2 ^ (Z.of_nat i)) + Z.of_nat x).
+
+(* AV-1 spec 4.10.7. ns(n) *)
+
+Inductive ns_w_relation (n w : nat) : Prop :=
+  | ns_w_intro :
+    2 ^ (w - 1) <= n ->
+    n < 2 ^ w ->
+    ns_w_relation n w.
+
+Inductive ns_m_relation (n : nat) : nat -> Prop :=
+  | ns_m_intro :
+    forall w, ns_w_relation n w ->
+    ns_m_relation n (2 ^ w - n).
+
+Inductive ns_decode_relation (n : nat) : list bit -> nat -> Prop :=
+  | ns_decode_short :
+    forall w, ns_w_relation n w ->
+    forall m, ns_m_relation n m ->
+    forall x, x < m ->
+    forall bits, f_decode_relation (w - 1) bits x ->
+    ns_decode_relation n bits x
+  | ns_decode_long :
+    forall w, ns_w_relation n w ->
+    forall m, ns_m_relation n m ->
+    forall x, x >= m ->
+    (* note: 2 * m <= m + x < 2 ^ w *)
+    forall bits, f_decode_relation w bits (m + x) ->
+    ns_decode_relation n bits x.
