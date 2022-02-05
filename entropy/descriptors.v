@@ -62,3 +62,39 @@ Inductive le_decode_relation : nat -> list bit -> nat -> Prop :=
       (S n)
       (l_0 ++ l_more)
       (x_0 + 2 ^ byte.bits_count * x_more).
+
+(* AV-1 spec 4.10.5. leb128() *)
+(* Continuation bit can only be 1, if i < 7. *)
+
+Inductive leb128_helper : nat -> list bit -> nat -> Prop :=
+  | leb128_helper_stop_bit :
+    forall i,
+    forall data_bits x, f_decode_relation 7 data_bits x ->
+    leb128_helper i ([bit_0] ++ data_bits) x
+  | leb128_helper_more :
+    forall i, i < 7 ->
+    forall data_bits x, f_decode_relation 7 data_bits x ->
+    forall bits_more x_more, leb128_helper (S i) bits_more x_more ->
+    leb128_helper i ([bit_1] ++ data_bits ++ bits_more) (x + 2^7 * x_more).
+
+Inductive leb128_decode_relation : list bit -> nat -> Prop :=
+  | leb128_decode_relation_intro :
+    forall bits x,
+    x < 2^32 ->
+    leb128_helper 0 bits x ->
+    leb128_decode_relation bits x.
+
+(* AV-1 spec 4.10.6. su(n) *)
+
+Inductive su_decode_relation : nat -> list bit -> Z -> Prop :=
+  | su_decode_non_negative :
+    forall i bits x,
+    f_decode_relation i bits x ->
+    su_decode_relation (S i) ([bit_0] ++ bits) (Z.of_nat x)
+  | su_decode_negative :
+    forall i bits x,
+    f_decode_relation i bits x ->
+    su_decode_relation
+      (S i)
+      ([bit_1] ++ bits)
+      (- (2 ^ (Z.of_nat i)) + Z.of_nat x).
