@@ -1,9 +1,10 @@
 -Q . formal_av1
-basic_types.v
 entropy/bitstream_position.v
 entropy/descriptors.v
+utils/Maps.v
+utils/codec.v
+basic_types.v
 formal_av1.v
-Maps.v
 obu_layer.v
 parser.v
 pseudocodes.v
