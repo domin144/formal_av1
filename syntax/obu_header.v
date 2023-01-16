@@ -88,7 +88,7 @@ Record obu_header : Set := make_obu_header
   extension_header_reserved_3bits : fin_by_bits 3
 }. *)
 
-Record obu_header : Set := make_obu_header
+Record obu_header_type : Set := make_obu_header
 {
   obu_forbidden_bit : nat;
   obu_type : obu_type_enum.t;
@@ -100,7 +100,7 @@ Record obu_header : Set := make_obu_header
   extension_header_reserved_3bits : nat
 }.
 
-Inductive obu_header_decode_relation : list bit -> obu_header -> Prop :=
+Inductive obu_header_decode_relation : list bit -> obu_header_type -> Prop :=
   obu_header_decode_intro :
     forall
         obu_forbidden_bit_bits

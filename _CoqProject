@@ -1,6 +1,8 @@
 -Q . formal_av1
 entropy/bitstream_position.v
 entropy/descriptors.v
+syntax/obu_header.v
+syntax/open_bitstream_unit.v
 utils/Maps.v
 utils/codec.v
 basic_types.v
