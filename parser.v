@@ -1,7 +1,7 @@
 Require Import Bool Arith List String Ascii ZArith.
 Import ListNotations.
 
-Require Import formal_av1.basic_types.
+Require Import formal_av1.syntax.definitions.
 
 Module Parser.
 
@@ -276,7 +276,7 @@ Fixpoint filter_comments (comment_open : bool) (xs : list string) : list string 
   end %string.
 
 Definition tokenize (s : string) : list string :=
-  filter_breaks 0 
+  filter_breaks 0
     (
       filter_double_breaks
         (filter_comments false (tokenize_break s))

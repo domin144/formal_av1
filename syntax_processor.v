@@ -2,6 +2,7 @@ Require Import List ZArith String.
 Import ListNotations.
 
 Require Import formal_av1.basic_types.
+Require Import formal_av1.syntax.definitions.
 Require Import formal_av1.pseudocodes.
 Require Import formal_av1.parser.
 Require Import formal_av1.state.
@@ -289,8 +290,8 @@ Module eval_module (S : State).
       | eval_stmt_syntax_element_simple :
         forall st0 st1 st2 e ref pd,
           e // st0 \\ st1 \\ er_reference ref ->
-            expr_op1n (expr_variable 
-           stmt_syntax_element (expr_variable label) / st \\ st & 
+            expr_op1n (expr_variable
+           stmt_syntax_element (expr_variable label) / st \\ st &
     with
       eval_expr : expression -> state -> state -> value -> Prop :=
       | eval_expr_number :

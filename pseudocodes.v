@@ -2,7 +2,7 @@ Require Import String.
 Require Import List.
 Import ListNotations.
 
-Require Import formal_av1.basic_types.
+Require Import formal_av1.syntax.definitions.
 
 (* symbols *)
 
@@ -423,7 +423,7 @@ metadata_obu( sz ) {
     @@metadata_type                                                            f(16)
     if ( metadata_type == METADATA_TYPE_PRIVATE_DATA )
         metadata_private_data( sz - 2 )
-    else if ( metadata_type == METADATA_TYPE_HDR_CLL ) 
+    else if ( metadata_type == METADATA_TYPE_HDR_CLL )
         metadata_hdr_cll( sz - 2 )
     else if ( metadata_type == METADATA_TYPE_HDR_MDCV )
         metadata_hdr_mdcv( sz - 2 )
@@ -446,7 +446,7 @@ metadata_hdr_cll( sz ) {
 Definition syntax_pseudocode_metadata_hdr_mdcv :=
   pseudocode_intro "
 metadata_hdr_mdcv( sz ) {
-    for ( i = 0; i < 3; i++ ) {    
+    for ( i = 0; i < 3; i++ ) {
         @@primary_chromaticity_x[ i ]                                          f(16)
         @@primary_chromaticity_y[ i ]                                          f(16)
     }
@@ -499,7 +499,7 @@ uncompressed_header( ) {
         @@current_frame_id                                                     f(idLen)
     }
     @@frame_size_override_flag                                                 f(1)
-    FrameIsIntra = (frame_type == INTRA_ONLY_FRAME || 
+    FrameIsIntra = (frame_type == INTRA_ONLY_FRAME ||
                     frame_type == KEY_FRAME)
     if ( frame_type == KEY_FRAME ) {
         frame_size( )
@@ -796,7 +796,7 @@ tile_info ( ) {
     minLog2TileCols = tile_log2(MAX_TILE_WIDTH_SB, MaxSbCols)
     maxLog2TileCols = tile_log2(1, Min(MaxSbCols, MAX_TILE_COLS))
     maxLog2TileRows = tile_log2(1, Min(MaxSbRows, MAX_TILE_ROWS))
-    minLog2Tiles = Max(minLog2TileCols, 
+    minLog2Tiles = Max(minLog2TileCols,
                        tile_log2(MAX_TILE_AREA_SB, MaxSbRows * MaxSbCols))
 
     @@uniform_tile_spacing_flag                                                f(1)
@@ -817,7 +817,7 @@ tile_info ( ) {
         }
         MiColStarts[i] = MiCols
         TileCols = i
-        
+
         minLog2TileRows = Max( minLog2Tiles - TileColsLog2, 0)
         maxTileHeightSb = MaxSbRows >> minLog2TileRows
         TileRowsLog2 = minLog2TileRows
@@ -1198,7 +1198,7 @@ tile_group_obu( sz ) {
     endBitPos = get_position( )
     headerBytes = (endBitPos - startBitPos) / 8
     sz -= headerBytes
-    
+
     for ( TileNum = tg_start; TileNum <= tg_end; TileNum++ ) {
         tileRow = TileNum / TileCols
         tileCol = TileNum % TileCols
@@ -1278,7 +1278,7 @@ clear_block_decoded_flags( notLastColumn ) {
     for ( plane = 0; plane < 1 + HasChroma * 2; plane++ ) {
         subX = (plane > 0) ? subsampling_x : 0
         subY = (plane > 0) ? subsampling_y : 0
-        for ( y = -1; y <= ( sbSize >> ( MI_SIZE_LOG2 + subY ) ); y++ ) 
+        for ( y = -1; y <= ( sbSize >> ( MI_SIZE_LOG2 + subY ) ); y++ )
             for ( x = -1; x <= ( sbSize >> ( MI_SIZE_LOG2 + subX ) ); x++ ) {
                 BlockDecoded[ plane ][ y ][ x ] = ( y < 0 || x < 0 )
             }
@@ -1573,7 +1573,7 @@ Definition syntax_pseudocode_read_inter_tx_size :=
 read_inter_tx_size( ) {
     bw4 = Num_4x4_Blocks_Wide[ MiSize ]
     bh4 = Num_4x4_Blocks_High[ MiSize ]
-    if (tx_mode == TX_MODE_SELECT && 
+    if (tx_mode == TX_MODE_SELECT &&
           MiSize > BLOCK_4X4 && is_inter &&
           !skip && !Lossless) {
         MinTxSize = TX_32X32
@@ -1962,7 +1962,7 @@ read_motion_mode( isCompound ) {
         motion_mode = SIMPLE
         return
     }
-    if ( !force_integer_mv && 
+    if ( !force_integer_mv &&
          ( YMode == GLOBALMV || YMode == GLOBAL_GLOBALMV ) ) {
         if (gm_type[ RefFrame[ 0 ] ] > TRANSLATION) {
             motion_mode = SIMPLE
@@ -1985,7 +1985,7 @@ read_motion_mode( isCompound ) {
 Definition syntax_pseudocode_read_interintra_mode :=
   pseudocode_intro "
 read_interintra_mode( isCompound ) {
-    if ( allow_interintra_compound && !isCompound && 
+    if ( allow_interintra_compound && !isCompound &&
          MiSize >= BLOCK_8X8 && MiSize <= BLOCK_32X32) {
         @@interintra                                                           S
         if (interintra) {
@@ -2291,7 +2291,7 @@ transform_tree( plane, startX, startY, w, h ) {
     lumaTxSz = InterTxSizes[ row ][ col ]
     lumaW = Tx_Width[ lumaTxSz ]
     lumaH = Tx_Height[ lumaTxSz ]
-    uses64 = w >= 64 || h >= 64 
+    uses64 = w >= 64 || h >= 64
     isSubsampled = subX || subY
     forceSplit = uses64 && isSubsampled
     if ( (isSubsampled && !uses64) ||
@@ -2376,18 +2376,18 @@ coeffs( plane, startX, startY, txSz ) {
         txScale = 2
     else if ( txSzCtx == TX_32X32 )
         txScale = 1
-    else 
+    else
         txScale = 0
     denom = 1 << txScale
     segEob = Min( 1024, Tx_Width[ txSz ] * Tx_Height[ txSz ] )
-    
+
     for ( c = 0; c < segEob; c++ )
         Quant[c] = 0
-    
+
     eob = 0
     culLevel = 0
     dcCategory = 0
-    
+
     @@all_zero                                                                 S
     if ( all_zero ) {
         c = 0
@@ -2402,7 +2402,7 @@ coeffs( plane, startX, startY, txSz ) {
         if ( plane == 0 )
             transform_type( startX, startY, Tx_Size_Sqr[ txSz ] )
         scan = get_scan( plane, txSz )
-    
+
         maxEobPt = ceil( log2( segEob ) ) + 1
         for ( eobPt = 1; eobPt < maxEobPt; eobPt++ ) {
             @@is_eob                                                           S
@@ -2436,7 +2436,7 @@ coeffs( plane, startX, startY, txSz ) {
             }
             Quant[ scan[ c ] ] = level
         }
-        
+
         for ( c = 0; c < eob; c++ ) {
             if ( Quant[ scan[ c ] ] != 0 ) {
                 if ( c == 0 ) {
@@ -2450,7 +2450,7 @@ coeffs( plane, startX, startY, txSz ) {
                 signs[ c ] = 0
             }
         }
-        
+
         for ( c = eob - 1; c >= 0; c-- ) {
             if ( Quant[ scan[ c ] ] > NUM_BASE_LEVELS ) {
               for ( idx = 0;
@@ -2477,25 +2477,25 @@ coeffs( plane, startX, startY, txSz ) {
               }
             }
         }
-        
+
         for ( c = 0; c < eob; c++ ) {
             culLevel += Quant[ scan[ c ] ]
         }
-        
+
         for ( c = 0; c < eob; c++ ) {
             if ( signs[ c ] )
                 Quant[ scan[ c ] ] = - Quant[ scan[ c ] ]
         }
 
         culLevel = Min( 63, culLevel )
-        
+
         if ( Quant[ 0 ] < 0 ) {
             dcCategory = 1
         } else if ( Quant[ 0 ] > 0 ) {
             dcCategory = 2
         }
     }
-    
+
     for( i = 0; i < w; i++ ) {
         AboveLevelContext[ plane ][ x4 + i ] = culLevel
         AboveDcContext[ plane ][ x4 + i ] = dcCategory
@@ -2511,26 +2511,26 @@ Definition syntax_pseudocode_compute_tx_type :=
   pseudocode_intro "
 compute_tx_type( plane, txSz, blockX, blockY ) {
     txSzSqr = Tx_Size_Sqr[ txSz ]
-    
+
     if ( Lossless || txSzSqr >= TX_32X32 )
         return DCT_DCT
-        
+
     set = get_tx_set( txSz )
-    
+
     if ( plane == 0 ) {
         txType = TxTypes[ blockY ][ blockX ]
         if ( RefFrame[ 0 ] != INTRA_FRAME && !Tx_Type_In_Set[ set ][ txType ] )
             return DCT_DCT
         return txType
     }
-    
+
     if ( RefFrame[ 0 ] != INTRA_FRAME ) {
         txType = TxTypes[ blockY << subsampling_y ][ blockX << subsampling_x ]
         if ( !Tx_Type_In_Set[ set ][ txType ] )
             return DCT_DCT
         return txType
     }
-    
+
     return Mode_To_Txfm[ UVMode ]
 }".
 
@@ -2632,7 +2632,7 @@ get_scan( plane, txSz ) {
     if ( Tx_Size_Sqr_Up[ txSz ] == TX_64X64 ) {
         return Default_Scan_32x32
     }
-    
+
     preferRow = ( PlaneTxType == ADST_DCT ||
                   PlaneTxType == V_DCT ||
                   PlaneTxType == V_ADST ||
@@ -2687,14 +2687,14 @@ read_coef( token ) {
     minValue = Extra_Bits[ token ][ 2 ]
     if ( cat == 0 )
         return token
-    
+
     if ( cat < 6 ) {
         extraBitCount = Extra_Bits[ token ][ 1 ]
     } else {
         extraBitCount = BitDepth + 3 + Max( 0, Tx_Size_Sqr_Up[ Min( TX_32X32, tx_size ) ] )
         extraBitCount = Min( 18, ( ( extraBitCount + 3 ) >> 2 ) << 2 )
     }
-    
+
     coef = 0
     count = 0
     cdfIndex = 0
@@ -2834,7 +2834,7 @@ palette_mode_info( ) {
             }
             while ( idx < PaletteSizeUV ) {
                 @@palette_delta_u                                              L(paletteBits)
-                palette_colors_u[ idx ] = 
+                palette_colors_u[ idx ] =
                           Clip1( palette_colors_u[ idx - 1 ] +
                                  palette_delta_u )
                 range = ( 1 << BitDepth ) - palette_colors_u[ idx ]
@@ -2842,7 +2842,7 @@ palette_mode_info( ) {
                 idx++
             }
             sort( palette_colors_u, 0, PaletteSizeUV - 1 )
-            
+
             @@delta_encode_palette_colors_v                                    L(1)
             if ( delta_encode_palette_colors_v ) {
                 minBits = BitDepth - 4
@@ -3251,7 +3251,7 @@ decode_lr_unit(plane, unitRow, unitCol) {
             LrSgrXqd[ TileNum ][ plane ][ unitRow ][ unitCol ][ i ] = v
             RefSgrXqd[ plane ][ i ] = v
         }
-    } 
+    }
 }
 
 Wiener_Taps_Min[3] = { -5, -23, -17 }
