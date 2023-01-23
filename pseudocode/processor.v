@@ -2,10 +2,10 @@ Require Import List ZArith String.
 Import ListNotations.
 
 Require Import formal_av1.basic_types.
-Require Import formal_av1.syntax.definitions.
-Require Import formal_av1.pseudocodes.
-Require Import formal_av1.parser.
-Require Import formal_av1.state.
+Require Import formal_av1.pseudocode.definitions.
+Require Import formal_av1.pseudocode.pseudocodes.
+Require Import formal_av1.pseudocode.parser.
+Require Import formal_av1.pseudocode.state.
 
 Module syntax_processor.
 

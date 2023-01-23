@@ -1,7 +1,7 @@
 Require Import Bool Arith List String Ascii ZArith.
 Import ListNotations.
 
-Require Import formal_av1.syntax.definitions.
+Require Import formal_av1.pseudocode.definitions.
 
 Module Parser.
 

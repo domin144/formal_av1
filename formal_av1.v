@@ -22,9 +22,9 @@ Require Import List ZArith.
 Import ListNotations.
 
 Require Import formal_av1.basic_types.
-Require Import formal_av1.pseudocodes.
-Require Import formal_av1.parser.
-Require Import formal_av1.syntax_processor.
+Require Import formal_av1.pseudocode.pseudocodes.
+Require Import formal_av1.pseudocode.parser.
+Require Import formal_av1.pseudocode.processor.
 
 Definition tile := frame.
 

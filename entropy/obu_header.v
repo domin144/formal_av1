@@ -5,7 +5,7 @@ Import ListNotations.
 
 Require Import formal_av1.basic_types.
 Require Import formal_av1.entropy.descriptors.
-Require formal_av1.structures.
+Require formal_av1.structure.obu_content.
 
 Inductive conditional_decode_relation
     {X : Set}
@@ -32,7 +32,8 @@ Inductive conditional_decode_relation
         []
         default_value.
 
-Inductive obu_header_decode_relation : list bit -> structures.obu_header_type -> Prop :=
+Inductive obu_header_decode_relation :
+  list bit -> structure.obu_content.obu_header_type -> Prop :=
   obu_header_decode_intro :
     forall
         obu_forbidden_bit_bits
@@ -58,7 +59,7 @@ Inductive obu_header_decode_relation : list bit -> structures.obu_header_type ->
     f_decode_relation
         3
         obu_type_bits
-        (structures.obu_type_enum.to_nat obu_type_value) ->
+        (structure.obu_content.obu_type_enum.to_nat obu_type_value) ->
     f_decode_relation
         1
         obu_extension_flag_bits
@@ -100,7 +101,7 @@ Inductive obu_header_decode_relation : list bit -> structures.obu_header_type ->
           ++ spatial_id_bits
           ++ extension_header_reserved_3bits_bits)
         (
-          structures.make_obu_header
+            structure.obu_content.make_obu_header
               obu_forbidden_bit_value
               obu_type_value
               obu_extension_flag_value

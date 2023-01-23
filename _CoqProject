@@ -1,16 +1,15 @@
 -Q . formal_av1
+basic_types.v
+structure/obu_sequence.v
+structure/obu_content.v
+entropy/obu_header.v
 entropy/bitstream_position.v
 entropy/descriptors.v
-structures.v
-syntax/definitions.v
-syntax/obu_header.v
-syntax/open_bitstream_unit.v
-utils/Maps.v
+pseudocode/definitions.v
+pseudocode/pseudocodes.v
+pseudocode/parser.v
+pseudocode/state.v
+pseudocode/processor.v
 utils/codec.v
-basic_types.v
+utils/Maps.v
 formal_av1.v
-obu_layer.v
-parser.v
-pseudocodes.v
-state.v
-syntax_processor.v

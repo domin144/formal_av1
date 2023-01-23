@@ -2,7 +2,7 @@ Require Import String.
 Require Import List.
 Import ListNotations.
 
-Require Import formal_av1.syntax.definitions.
+Require Import formal_av1.pseudocode.definitions.
 
 (* symbols *)
 
